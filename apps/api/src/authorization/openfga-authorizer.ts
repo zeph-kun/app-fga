@@ -22,6 +22,13 @@ const ignoreMissingDeletes = {
   conflict: { onMissingDeletes: ClientWriteRequestOnMissingDeletes.Ignore },
 };
 
+/** Strongest first: the first permission held tells the role. */
+const ACCESS_PROBES = [
+  { permission: 'can_delete', role: 'owner' },
+  { permission: 'can_edit', role: 'editor' },
+  { permission: 'can_view', role: 'viewer' },
+] as const satisfies readonly { permission: Permission; role: Role }[];
+
 interface Tuple {
   readonly user: string;
   readonly relation: string;
@@ -69,6 +76,23 @@ export class OpenFgaAuthorizer extends Authorizer implements OnModuleInit {
       context: nowContext(),
     });
     return allowed === true;
+  }
+
+  /** One BatchCheck round trip instead of up to three sequential Checks. */
+  override async accessOn(userId: string, resource: Resource): Promise<Role | null> {
+    const { result } = await this.client.batchCheck({
+      checks: ACCESS_PROBES.map(({ permission }) => ({
+        user: `user:${userId}`,
+        relation: permission,
+        object: objectOf(resource),
+        context: nowContext(),
+      })),
+    });
+    const failed = result.find((r) => r.error);
+    if (failed?.error) throw new Error(`OpenFGA batch check failed: ${failed.error.message}`);
+    const allowed = new Set(result.filter((r) => r.allowed).map((r) => r.request.relation));
+    const held = ACCESS_PROBES.find(({ permission }) => allowed.has(permission));
+    return held?.role ?? null;
   }
 
   override async grant(subject: Subject, role: Role, resource: Resource, expiresAt?: Date): Promise<void> {

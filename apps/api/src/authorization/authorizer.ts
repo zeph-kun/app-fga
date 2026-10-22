@@ -35,6 +35,17 @@ export interface Grant {
 export abstract class Authorizer {
   abstract can(userId: string, permission: Permission, resource: Resource): Promise<boolean>;
 
+  /**
+   * The strongest role the user effectively holds on a resource (inherited, team and
+   * unexpired access included), or `null` without any. For display: guard actions with `can`.
+   */
+  async accessOn(userId: string, resource: Resource): Promise<Role | null> {
+    if (await this.can(userId, 'can_delete', resource)) return 'owner';
+    if (await this.can(userId, 'can_edit', resource)) return 'editor';
+    if (await this.can(userId, 'can_view', resource)) return 'viewer';
+    return null;
+  }
+
   /** `expiresAt`, if given, makes the grant stop applying once that time passes. */
   abstract grant(subject: Subject, role: Role, resource: Resource, expiresAt?: Date): Promise<void>;
 

@@ -40,6 +40,37 @@ export function authorizerContract(
       expect(await authorizer.can('alice', 'can_edit', asViewer)).toBe(false);
     });
 
+    it('reports the strongest access a user holds, or null without any', async () => {
+      const authorizer = await create();
+      const asOwner = documentRef(randomUUID());
+      const asEditor = documentRef(randomUUID());
+      const asViewer = documentRef(randomUUID());
+      await authorizer.grant(userSubject('alice'), 'owner', asOwner);
+      await authorizer.grant(userSubject('alice'), 'editor', asEditor);
+      await authorizer.grant(userSubject('alice'), 'viewer', asViewer);
+
+      expect(await authorizer.accessOn('alice', asOwner)).toBe('owner');
+      expect(await authorizer.accessOn('alice', asEditor)).toBe('editor');
+      expect(await authorizer.accessOn('alice', asViewer)).toBe('viewer');
+      expect(await authorizer.accessOn('bob', asOwner)).toBeNull();
+    });
+
+    it('reports access inherited from a folder, given to a team, and not an expired one', async () => {
+      const authorizer = await create();
+      const folder = folderRef(randomUUID());
+      const doc = documentRef(randomUUID());
+      const team = randomUUID();
+      await authorizer.grant(userSubject('alice'), 'owner', folder);
+      await authorizer.setParent(doc.id, folder.id);
+      await authorizer.addTeamMember(team, 'carol');
+      await authorizer.grant(teamSubject(team), 'viewer', doc);
+      await authorizer.grant(userSubject('bob'), 'editor', doc, inThePast);
+
+      expect(await authorizer.accessOn('alice', doc)).toBe('owner');
+      expect(await authorizer.accessOn('carol', doc)).toBe('viewer');
+      expect(await authorizer.accessOn('bob', doc)).toBeNull();
+    });
+
     it('applies the same roles to folders', async () => {
       const authorizer = await create();
       const shared = folderRef(randomUUID());

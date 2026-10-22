@@ -78,11 +78,7 @@ export class FoldersService {
   async get(userId: string, id: string): Promise<FolderView> {
     const folder = await this.require(userId, 'can_view', id);
     const ref = folderRef(id);
-    const access: Role = (await this.authorizer.can(userId, 'can_delete', ref))
-      ? 'owner'
-      : (await this.authorizer.can(userId, 'can_edit', ref))
-        ? 'editor'
-        : 'viewer';
+    const access: Role = (await this.authorizer.accessOn(userId, ref)) ?? 'viewer';
     const inside = await this.documents.findByFolder(id);
     const visible = new Set(await this.authorizer.resourcesWhere(userId, 'can_view', 'document'));
     return { ...folder, access, documents: inside.filter((d) => visible.has(d.id)) };
