@@ -74,18 +74,9 @@ export class DocumentsService {
   }
 
   async list(userId: string): Promise<DocumentView[]> {
-    const [visible, editable, owned] = await Promise.all(
-      (['can_view', 'can_edit', 'can_delete'] as const).map(async (permission) =>
-        this.authorizer.resourcesWhere(userId, permission, 'document'),
-      ),
-    );
-    const canEdit = new Set(editable);
-    const canDelete = new Set(owned);
-    const documents = await this.repository.findByIds(visible ?? []);
-    return documents.map((document) => ({
-      ...document,
-      access: canDelete.has(document.id) ? 'owner' : canEdit.has(document.id) ? 'editor' : 'viewer',
-    }));
+    const roles = await this.authorizer.rolesOn(userId, 'document');
+    const documents = await this.repository.findByIds([...roles.keys()]);
+    return documents.map((document) => ({ ...document, access: roles.get(document.id) ?? 'viewer' }));
   }
 
   async get(userId: string, id: string): Promise<DocumentView> {

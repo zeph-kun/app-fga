@@ -49,6 +49,23 @@ export abstract class Authorizer {
   /** `expiresAt`, if given, makes the grant stop applying once that time passes. */
   abstract grant(subject: Subject, role: Role, resource: Resource, expiresAt?: Date): Promise<void>;
 
+  /**
+   * The strongest role the user holds on every resource of `type` they can view, keyed by
+   * id (what `accessOn` answers for one). For display: guard actions with `can`.
+   */
+  async rolesOn(userId: string, type: ResourceType): Promise<Map<string, Role>> {
+    const [viewable, editable, deletable] = await Promise.all(
+      (['can_view', 'can_edit', 'can_delete'] as const).map((permission) =>
+        this.resourcesWhere(userId, permission, type),
+      ),
+    );
+    const roles = new Map<string, Role>();
+    for (const id of viewable ?? []) roles.set(id, 'viewer');
+    for (const id of editable ?? []) roles.set(id, 'editor');
+    for (const id of deletable ?? []) roles.set(id, 'owner');
+    return roles;
+  }
+
   /** Removes a direct grant. Revoking a grant that does not exist is a no-op. */
   abstract revoke(subject: Subject, role: Role, resource: Resource): Promise<void>;
 

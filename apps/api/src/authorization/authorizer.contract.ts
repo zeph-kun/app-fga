@@ -71,6 +71,34 @@ export function authorizerContract(
       expect(await authorizer.accessOn('bob', doc)).toBeNull();
     });
 
+    it('maps every resource of a type to the strongest role the user holds on it', async () => {
+      const authorizer = await create();
+      const folder = folderRef(randomUUID());
+      const owned = documentRef(randomUUID());
+      const edited = documentRef(randomUUID());
+      const viewed = documentRef(randomUUID());
+      const inherited = documentRef(randomUUID());
+      const expired = documentRef(randomUUID());
+      const others = documentRef(randomUUID());
+      await authorizer.grant(userSubject('alice'), 'owner', owned);
+      await authorizer.grant(userSubject('alice'), 'editor', edited);
+      await authorizer.grant(userSubject('alice'), 'viewer', viewed);
+      await authorizer.grant(userSubject('alice'), 'editor', folder);
+      await authorizer.setParent(inherited.id, folder.id);
+      await authorizer.grant(userSubject('alice'), 'viewer', expired, inThePast);
+      await authorizer.grant(userSubject('bob'), 'owner', others);
+
+      const roles = await authorizer.rolesOn('alice', 'document');
+
+      expect(roles.get(owned.id)).toBe('owner');
+      expect(roles.get(edited.id)).toBe('editor');
+      expect(roles.get(viewed.id)).toBe('viewer');
+      expect(roles.get(inherited.id)).toBe('editor');
+      expect(roles.has(expired.id)).toBe(false);
+      expect(roles.has(others.id)).toBe(false);
+      expect((await authorizer.rolesOn('alice', 'folder')).get(folder.id)).toBe('editor');
+    });
+
     it('applies the same roles to folders', async () => {
       const authorizer = await create();
       const shared = folderRef(randomUUID());

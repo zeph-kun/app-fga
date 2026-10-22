@@ -61,18 +61,9 @@ export class FoldersService {
   }
 
   async list(userId: string): Promise<FolderSummary[]> {
-    const [visible, editable, owned] = await Promise.all(
-      (['can_view', 'can_edit', 'can_delete'] as const).map(async (permission) =>
-        this.authorizer.resourcesWhere(userId, permission, 'folder'),
-      ),
-    );
-    const canEdit = new Set(editable);
-    const canDelete = new Set(owned);
-    const folders = await this.folders.findByIds(visible ?? []);
-    return folders.map((folder) => ({
-      ...folder,
-      access: canDelete.has(folder.id) ? 'owner' : canEdit.has(folder.id) ? 'editor' : 'viewer',
-    }));
+    const roles = await this.authorizer.rolesOn(userId, 'folder');
+    const folders = await this.folders.findByIds([...roles.keys()]);
+    return folders.map((folder) => ({ ...folder, access: roles.get(folder.id) ?? 'viewer' }));
   }
 
   async get(userId: string, id: string): Promise<FolderView> {
