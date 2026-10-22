@@ -1,0 +1,147 @@
+import {
+  Authorizer,
+  type Grant,
+  type Permission,
+  type Resource,
+  type ResourceType,
+  type Role,
+  type Subject,
+} from './authorizer.js';
+
+const IMPLIED_BY: Record<Role, readonly Role[]> = {
+  owner: ['owner'],
+  editor: ['editor', 'owner'],
+  viewer: ['viewer', 'editor', 'owner'],
+};
+
+const ROLE_OF: Record<Permission, Role> = {
+  can_view: 'viewer',
+  can_edit: 'editor',
+  can_delete: 'owner',
+  can_share: 'owner',
+};
+
+interface StoredGrant extends Grant {
+  readonly resource: Resource;
+}
+
+/** Test adapter mirroring infra/openfga/model.fga. */
+export class InMemoryAuthorizer extends Authorizer {
+  private readonly grants = new Map<string, StoredGrant>();
+  private readonly parents = new Map<string, string>();
+  private readonly teams = new Map<string, Set<string>>();
+
+  override can(userId: string, permission: Permission, resource: Resource): Promise<boolean> {
+    return Promise.resolve(this.holds(userId, ROLE_OF[permission], resource));
+  }
+
+  override grant(subject: Subject, role: Role, resource: Resource, expiresAt?: Date): Promise<void> {
+    this.grants.set(key(subject, role, resource), { subject, role, resource, expiresAt });
+    return Promise.resolve();
+  }
+
+  override revoke(subject: Subject, role: Role, resource: Resource): Promise<void> {
+    this.grants.delete(key(subject, role, resource));
+    return Promise.resolve();
+  }
+
+  override grantsOn(resource: Resource): Promise<Grant[]> {
+    const grants = [...this.grants.values()]
+      .filter((g) => sameResource(g.resource, resource) && !isExpired(g))
+      .map(({ subject, role, expiresAt }) => ({ subject, role, ...(expiresAt && { expiresAt }) }));
+    return Promise.resolve(grants);
+  }
+
+  override revokeAll(resource: Resource): Promise<void> {
+    for (const [k, g] of this.grants) {
+      if (sameResource(g.resource, resource)) this.grants.delete(k);
+    }
+    if (resource.type === 'document') this.parents.delete(resource.id);
+    return Promise.resolve();
+  }
+
+  override resourcesWhere(
+    userId: string,
+    permission: Permission,
+    type: ResourceType,
+  ): Promise<string[]> {
+    const ids = new Set<string>();
+    for (const { resource } of this.grants.values()) {
+      if (resource.type === type) ids.add(resource.id);
+    }
+    if (type === 'document') for (const id of this.parents.keys()) ids.add(id);
+    return Promise.resolve(
+      [...ids].filter((id) => this.holds(userId, ROLE_OF[permission], { type, id })),
+    );
+  }
+
+  override setParent(documentId: string, folderId: string | null): Promise<void> {
+    if (folderId === null) this.parents.delete(documentId);
+    else this.parents.set(documentId, folderId);
+    return Promise.resolve();
+  }
+
+  override teamMembers(teamId: string): Promise<string[]> {
+    return Promise.resolve([...(this.teams.get(teamId) ?? [])]);
+  }
+
+  override addTeamMember(teamId: string, userId: string): Promise<void> {
+    const members = this.teams.get(teamId) ?? new Set<string>();
+    members.add(userId);
+    this.teams.set(teamId, members);
+    return Promise.resolve();
+  }
+
+  override removeTeamMember(teamId: string, userId: string): Promise<void> {
+    this.teams.get(teamId)?.delete(userId);
+    return Promise.resolve();
+  }
+
+  override teamsOf(userId: string): Promise<string[]> {
+    const ids = [...this.teams.entries()].filter(([, members]) => members.has(userId)).map(([id]) => id);
+    return Promise.resolve(ids);
+  }
+
+  override usersWithAccess(resource: Resource, permission: Permission): Promise<string[]> {
+    const role = ROLE_OF[permission];
+    const users = new Set<string>();
+    const scan = (target: Resource) => {
+      for (const g of this.grants.values()) {
+        if (!sameResource(g.resource, target) || !IMPLIED_BY[role].includes(g.role) || isExpired(g)) {
+          continue;
+        }
+        if (g.subject.type === 'user') users.add(g.subject.id);
+        else for (const member of this.teams.get(g.subject.id) ?? []) users.add(member);
+      }
+    };
+    scan(resource);
+    const parent = resource.type === 'document' ? this.parents.get(resource.id) : undefined;
+    if (parent !== undefined) scan({ type: 'folder', id: parent });
+    return Promise.resolve([...users]);
+  }
+
+  /** A role is held directly (or through a higher role, or via team membership), or inherited from the document's folder. */
+  private holds(userId: string, role: Role, resource: Resource): boolean {
+    for (const g of this.grants.values()) {
+      if (!sameResource(g.resource, resource) || !IMPLIED_BY[role].includes(g.role) || isExpired(g)) {
+        continue;
+      }
+      const matches = g.subject.type === 'user' ? g.subject.id === userId : this.teams.get(g.subject.id)?.has(userId);
+      if (matches) return true;
+    }
+    const parent = resource.type === 'document' ? this.parents.get(resource.id) : undefined;
+    return parent !== undefined && this.holds(userId, role, { type: 'folder', id: parent });
+  }
+}
+
+function key(subject: Subject, role: Role, { type, id }: Resource): string {
+  return `${subject.type}:${subject.id}|${role}|${type}|${id}`;
+}
+
+function sameResource(a: Resource, b: Resource): boolean {
+  return a.type === b.type && a.id === b.id;
+}
+
+function isExpired(grant: Grant): boolean {
+  return grant.expiresAt !== undefined && grant.expiresAt.getTime() <= Date.now();
+}

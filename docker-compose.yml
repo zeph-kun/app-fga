@@ -1,0 +1,70 @@
+# Dev-only credentials below have safe defaults so the stack runs with no setup;
+# override them via a root `.env` (see `.env.example`) before using this file
+# anywhere reachable by anyone but you.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: postgres
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_HOSTNAME: http://localhost:8080
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      - ./infra/keycloak/realm-app-fga.json:/opt/keycloak/data/import/realm-app-fga.json:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  openfga-migrate:
+    image: openfga/openfga:latest
+    command: migrate
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/openfga?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  openfga:
+    image: openfga/openfga:latest
+    command: run
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/openfga?sslmode=disable
+      # The HTTP API has no auth otherwise: anyone reaching :8081 can read and write every tuple.
+      # The Playground only works with authn-method 'none', so enabling this disables it;
+      # use the OpenFGA CLI or curl with OPENFGA_PRESHARED_KEY instead (see README).
+      OPENFGA_AUTHN_METHOD: preshared
+      OPENFGA_AUTHN_PRESHARED_KEYS: ${OPENFGA_PRESHARED_KEY:-dev-openfga-key}
+      OPENFGA_PLAYGROUND_ENABLED: "false"
+    ports:
+      - "8081:8080" # HTTP API
+    depends_on:
+      openfga-migrate:
+        condition: service_completed_successfully
+
+volumes:
+  postgres-data:

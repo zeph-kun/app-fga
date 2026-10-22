@@ -1,0 +1,147 @@
+{
+  "realm": "app-fga",
+  "enabled": true,
+  "registrationAllowed": false,
+  "sslRequired": "none",
+  "clients": [
+    {
+      "clientId": "web",
+      "name": "Web (Next.js)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "dev-web-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:3000/*"
+      ],
+      "webOrigins": [
+        "http://localhost:3000"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:3000/*"
+      }
+    },
+    {
+      "clientId": "dev-cli",
+      "name": "Dev CLI (curl / scripts, dev only)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true
+    },
+    {
+      "clientId": "api-service",
+      "name": "API (service account, checks usernames before a Share)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "dev-api-service-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true
+    }
+  ],
+  "users": [
+    {
+      "username": "service-account-api-service",
+      "enabled": true,
+      "serviceAccountClientId": "api-service",
+      "clientRoles": {
+        "realm-management": ["view-users"]
+      }
+    },
+    {
+      "username": "alice",
+      "email": "alice@example.com",
+      "firstName": "Alice",
+      "lastName": "Martin",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "alice",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "bob",
+      "email": "bob@example.com",
+      "firstName": "Bob",
+      "lastName": "Durand",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "bob",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "florian",
+      "email": "florian@example.com",
+      "firstName": "Florian",
+      "lastName": "Dev",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "florian",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "adham",
+      "email": "adham@example.com",
+      "firstName": "Adham",
+      "lastName": "Dev",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "adham",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "jeremy",
+      "email": "jeremy@example.com",
+      "firstName": "Jeremy",
+      "lastName": "Dev",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "jeremy",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "yassine",
+      "email": "yassine@example.com",
+      "firstName": "Yassine",
+      "lastName": "Dev",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "yassine",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}

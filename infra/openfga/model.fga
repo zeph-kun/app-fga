@@ -1,0 +1,41 @@
+model
+  schema 1.1
+
+type user
+
+# A named group of Users. Sharing a Document or Folder with a Team gives every
+# member the same role, without a tuple per person.
+type team
+  relations
+    define member: [user]
+
+# Roles are what a User or Team is given; `can_*` permissions are what the API checks.
+type folder
+  relations
+    define owner: [user]
+    define editor: [user, user with non_expired, team#member, team#member with non_expired] or owner
+    define viewer: [user, user with non_expired, team#member, team#member with non_expired] or editor
+
+    define can_view: viewer
+    define can_edit: editor
+    define can_delete: owner
+    define can_share: owner
+
+# A document in a folder inherits the folder's roles; it can also be given roles of its own.
+type document
+  relations
+    define parent: [folder]
+    define owner: [user] or owner from parent
+    define editor: [user, user with non_expired, team#member, team#member with non_expired] or owner or editor from parent
+    define viewer: [user, user with non_expired, team#member, team#member with non_expired] or editor or viewer from parent
+
+    define can_view: viewer
+    define can_edit: editor
+    define can_delete: owner
+    define can_share: owner
+
+# True once `current_time` (passed on every Check/ListObjects/ListUsers call)
+# is past `expires_at` (stored on the tuple when a Share is time-bound).
+condition non_expired(current_time: timestamp, expires_at: timestamp) {
+  current_time < expires_at
+}
