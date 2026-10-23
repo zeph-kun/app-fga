@@ -26,6 +26,10 @@ export class PrismaFolderRepository extends FolderRepository {
     return rows.map(toFolder);
   }
 
+  override async findAll(): Promise<Folder[]> {
+    return (await this.prisma.folder.findMany()).map(toFolder);
+  }
+
   override async delete(id: string): Promise<void> {
     await this.prisma.folder.deleteMany({ where: { id } });
   }

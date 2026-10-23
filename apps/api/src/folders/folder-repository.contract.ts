@@ -21,6 +21,19 @@ export function folderRepositoryContract(
       expect(await repository.findById(randomUUID())).toBeUndefined();
     });
 
+    it('lists every stored folder, and no longer one that was deleted', async () => {
+      const repository = await create();
+      const [kept, deleted] = [aFolder(), aFolder()];
+      await repository.save(kept);
+      await repository.save(deleted);
+      await repository.delete(deleted.id);
+
+      const all = await repository.findAll();
+
+      expect(all).toContainEqual(kept);
+      expect(all.map((f) => f.id)).not.toContain(deleted.id);
+    });
+
     it('replaces a folder saved again under the same id', async () => {
       const repository = await create();
       const folder = aFolder();

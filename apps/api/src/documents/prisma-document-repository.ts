@@ -26,6 +26,10 @@ export class PrismaDocumentRepository extends DocumentRepository {
     return rows.map(toDocument);
   }
 
+  override async findAll(): Promise<Document[]> {
+    return (await this.prisma.document.findMany()).map(toDocument);
+  }
+
   override async findByFolder(folderId: string): Promise<Document[]> {
     const rows = await this.prisma.document.findMany({ where: { folderId } });
     return rows.map(toDocument);

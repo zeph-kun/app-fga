@@ -13,6 +13,9 @@ export abstract class DocumentRepository {
   /** The documents that exist among `ids`; unknown ids are skipped. Order is not guaranteed. */
   abstract findByIds(ids: readonly string[]): Promise<Document[]>;
 
+  /** Every stored document, for maintenance (see `Reconciler`). Order is not guaranteed. */
+  abstract findAll(): Promise<Document[]>;
+
   abstract findByFolder(folderId: string): Promise<Document[]>;
 
   /** Deleting an unknown id is a no-op. */

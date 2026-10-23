@@ -18,6 +18,10 @@ export class InMemoryFolderRepository extends FolderRepository {
     return Promise.resolve(ids.flatMap((id) => this.folders.get(id) ?? []));
   }
 
+  override findAll(): Promise<Folder[]> {
+    return Promise.resolve([...this.folders.values()]);
+  }
+
   override delete(id: string): Promise<void> {
     this.folders.delete(id);
     return Promise.resolve();

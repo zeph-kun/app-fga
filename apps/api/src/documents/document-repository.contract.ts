@@ -34,6 +34,19 @@ export function documentRepositoryContract(
       expect((await repository.findById(document.id))?.folderId).toBeNull();
     });
 
+    it('lists every stored document, and no longer one that was deleted', async () => {
+      const repository = await create();
+      const [kept, deleted] = [aDocument(), aDocument()];
+      await repository.save(kept);
+      await repository.save(deleted);
+      await repository.delete(deleted.id);
+
+      const all = await repository.findAll();
+
+      expect(all).toContainEqual(kept);
+      expect(all.map((d) => d.id)).not.toContain(deleted.id);
+    });
+
     it('lists the documents of a folder', async () => {
       const repository = await create();
       const folderId = randomUUID();

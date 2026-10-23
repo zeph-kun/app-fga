@@ -13,6 +13,9 @@ export abstract class FolderRepository {
   /** The folders that exist among `ids`; unknown ids are skipped. Order is not guaranteed. */
   abstract findByIds(ids: readonly string[]): Promise<Folder[]>;
 
+  /** Every stored folder, for maintenance (see `Reconciler`). Order is not guaranteed. */
+  abstract findAll(): Promise<Folder[]>;
+
   /** Deleting an unknown id is a no-op. */
   abstract delete(id: string): Promise<void>;
 }

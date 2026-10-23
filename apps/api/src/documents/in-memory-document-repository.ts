@@ -18,6 +18,10 @@ export class InMemoryDocumentRepository extends DocumentRepository {
     return Promise.resolve(ids.flatMap((id) => this.documents.get(id) ?? []));
   }
 
+  override findAll(): Promise<Document[]> {
+    return Promise.resolve([...this.documents.values()]);
+  }
+
   override findByFolder(folderId: string): Promise<Document[]> {
     return Promise.resolve([...this.documents.values()].filter((d) => d.folderId === folderId));
   }
