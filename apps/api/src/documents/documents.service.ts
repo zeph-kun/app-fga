@@ -9,16 +9,7 @@ import {
   userSubject,
 } from '../authorization/authorizer.js';
 import { FolderRepository } from '../folders/folder-repository.js';
-import {
-  expiresAtFrom,
-  isSharedRole,
-  nameOfSubject,
-  requireSubjectExists,
-  type ShareEntry,
-  type ShareInput,
-} from '../sharing/sharing.js';
-import { TeamRepository } from '../teams/team-repository.js';
-import { UserDirectory } from '../users/user-directory.js';
+import { Sharing, type ShareEntry, type ShareInput } from '../sharing/sharing.js';
 import type { Document } from './document.js';
 import { DocumentRepository } from './document-repository.js';
 
@@ -54,8 +45,7 @@ export class DocumentsService {
     private readonly authorizer: Authorizer,
     private readonly repository: DocumentRepository,
     private readonly folders: FolderRepository,
-    private readonly users: UserDirectory,
-    private readonly teams: TeamRepository,
+    private readonly sharing: Sharing,
   ) {}
 
   async create(userId: string, { folderId = null, ...input }: CreateDocumentInput): Promise<Document> {
@@ -136,42 +126,25 @@ export class DocumentsService {
     await this.authorizer.revokeAll(documentRef(id));
   }
 
-  async share(userId: string, id: string, { subject, role, expiresInHours }: ShareInput): Promise<void> {
+  async share(userId: string, id: string, input: ShareInput): Promise<void> {
     const document = await this.require(userId, 'can_share', id);
-    if (subject.type === 'user' && subject.id === document.ownerId) {
-      throw new ForbiddenException('The owner already has full access');
-    }
-    await requireSubjectExists(subject, this.users, this.teams);
-    const ref = documentRef(id);
-    await this.authorizer.revoke(subject, role === 'editor' ? 'viewer' : 'editor', ref);
-    await this.authorizer.grant(subject, role, ref, expiresAtFrom(expiresInHours));
+    await this.sharing.share(documentRef(id), document.ownerId, input);
   }
 
   async shares(userId: string, id: string): Promise<ShareEntry[]> {
     await this.require(userId, 'can_share', id);
-    const grants = await this.authorizer.grantsOn(documentRef(id));
-    const entries = await Promise.all(
-      grants
-        .filter(isSharedRole)
-        .map(async (g) => ({ ...g, name: await nameOfSubject(g.subject, this.teams) })),
-    );
-    return entries;
+    return this.sharing.shares(documentRef(id));
   }
 
   async unshare(userId: string, id: string, subject: ShareInput['subject']): Promise<void> {
     const document = await this.require(userId, 'can_share', id);
-    if (subject.type === 'user' && subject.id === document.ownerId) {
-      throw new ForbiddenException('The owner cannot be removed');
-    }
-    const ref = documentRef(id);
-    await this.authorizer.revoke(subject, 'editor', ref);
-    await this.authorizer.revoke(subject, 'viewer', ref);
+    await this.sharing.unshare(documentRef(id), document.ownerId, subject);
   }
 
   /** Every user who can view this document, Teams and folder inheritance resolved — for an access review. */
   async accessList(userId: string, id: string): Promise<string[]> {
     await this.require(userId, 'can_share', id);
-    return this.authorizer.usersWithAccess(documentRef(id), 'can_view');
+    return this.sharing.accessList(documentRef(id));
   }
 
   /** Same 404/403 rules as `require`, for the Folder a Document is created in or moved to. */

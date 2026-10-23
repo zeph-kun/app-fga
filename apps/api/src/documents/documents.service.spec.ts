@@ -4,6 +4,7 @@ import { InMemoryAuthorizer } from '../authorization/in-memory-authorizer.js';
 import { InMemoryFolderRepository } from '../folders/in-memory-folder-repository.js';
 import { FoldersService } from '../folders/folders.service.js';
 import { InMemoryTeamRepository } from '../teams/in-memory-team-repository.js';
+import { Sharing } from '../sharing/sharing.js';
 import { TeamsService } from '../teams/teams.service.js';
 import { InMemoryUserDirectory } from '../users/in-memory-user-directory.js';
 import type { Document } from './document.js';
@@ -19,20 +20,19 @@ function setupWithFolders() {
   const teams = new InMemoryTeamRepository();
   return {
     authorizer,
-    documents: new DocumentsService(authorizer, documents, folders, users, teams),
+    documents: new DocumentsService(authorizer, documents, folders, new Sharing(authorizer, users, teams)),
     folders: new FoldersService(authorizer, folders, documents, users, teams),
     teams: new TeamsService(authorizer, teams, users),
   };
 }
 
 function setup() {
-  const teams = new InMemoryTeamRepository();
+  const authorizer = new InMemoryAuthorizer();
   return new DocumentsService(
-    new InMemoryAuthorizer(),
+    authorizer,
     new InMemoryDocumentRepository(),
     new InMemoryFolderRepository(),
-    new InMemoryUserDirectory(['alice', 'bob', 'carol']),
-    teams,
+    new Sharing(authorizer, new InMemoryUserDirectory(['alice', 'bob', 'carol']), new InMemoryTeamRepository()),
   );
 }
 
@@ -104,16 +104,14 @@ describe('DocumentsService', () => {
       authorizer,
       repository,
       new InMemoryFolderRepository(),
-      users,
-      teams,
+      new Sharing(authorizer, users, teams),
     ).create('alice', { title: 'Plan', content: 'v1' });
 
     const restarted = new DocumentsService(
       authorizer,
       repository,
       new InMemoryFolderRepository(),
-      users,
-      teams,
+      new Sharing(authorizer, users, teams),
     );
 
     expect(await restarted.get('alice', doc.id)).toMatchObject({ title: 'Plan', content: 'v1' });
@@ -126,8 +124,7 @@ describe('DocumentsService', () => {
       authorizer,
       new InMemoryDocumentRepository(),
       new InMemoryFolderRepository(),
-      new InMemoryUserDirectory(['bob']),
-      new InMemoryTeamRepository(),
+      new Sharing(authorizer, new InMemoryUserDirectory(['bob']), new InMemoryTeamRepository()),
     );
     const doc = await service.create('alice', { title: 'Plan', content: '' });
     await service.share('alice', doc.id, { subject: userSubject('bob'), role: 'editor' });
@@ -177,12 +174,12 @@ describe('DocumentsService', () => {
       }
     }
     const repository = new RecordingRepository();
+    const authorizer = new UnavailableAuthorizer();
     const service = new DocumentsService(
-      new UnavailableAuthorizer(),
+      authorizer,
       repository,
       new InMemoryFolderRepository(),
-      new InMemoryUserDirectory(),
-      new InMemoryTeamRepository(),
+      new Sharing(authorizer, new InMemoryUserDirectory(), new InMemoryTeamRepository()),
     );
 
     await expect(service.create('alice', { title: 'Plan', content: '' })).rejects.toThrow(
@@ -275,7 +272,7 @@ describe('DocumentsService', () => {
       const folderRepository = new InMemoryFolderRepository();
       const users = new InMemoryUserDirectory();
       const teams = new InMemoryTeamRepository();
-      const documents = new DocumentsService(authorizer, documentRepository, folderRepository, users, teams);
+      const documents = new DocumentsService(authorizer, documentRepository, folderRepository, new Sharing(authorizer, users, teams));
       const folders = new FoldersService(authorizer, folderRepository, documentRepository, users, teams);
       const folder = await folders.create('alice', { name: 'Projects' });
       const doc = await documents.create('alice', { title: 'Plan', content: '' });
