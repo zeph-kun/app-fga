@@ -23,6 +23,10 @@ export class OpenFgaMembership extends Membership {
     await this.store.client.write({ deletes: [memberTuple(teamId, userId)] }, ignoreMissingDeletes);
   }
 
+  override async teamsWithMembers(): Promise<string[]> {
+    return this.store.objectIdsOfType('team');
+  }
+
   override async teamsOf(userId: string): Promise<string[]> {
     const { objects } = await this.store.client.listObjects({
       user: `user:${userId}`,

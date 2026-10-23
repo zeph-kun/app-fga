@@ -9,6 +9,9 @@ export abstract class Membership {
   /** Removing a membership that does not exist is a no-op. */
   abstract remove(teamId: string, userId: string): Promise<void>;
 
+  /** Ids of every Team that has at least one member, for maintenance (see `Reconciler`). */
+  abstract teamsWithMembers(): Promise<string[]>;
+
   /** Ids of every Team the user is a direct member of. */
   abstract teamsOf(userId: string): Promise<string[]>;
 }

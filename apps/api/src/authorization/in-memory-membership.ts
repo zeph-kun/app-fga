@@ -18,6 +18,10 @@ export class InMemoryMembership extends Membership {
     return Promise.resolve();
   }
 
+  override teamsWithMembers(): Promise<string[]> {
+    return Promise.resolve([...this.teams].filter(([, members]) => members.size > 0).map(([id]) => id));
+  }
+
   override teamsOf(userId: string): Promise<string[]> {
     const ids = [...this.teams.entries()].filter(([, members]) => members.has(userId)).map(([id]) => id);
     return Promise.resolve(ids);

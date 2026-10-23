@@ -26,6 +26,10 @@ export class PrismaTeamRepository extends TeamRepository {
     return rows.map(toTeam);
   }
 
+  override async findAll(): Promise<Team[]> {
+    return (await this.prisma.team.findMany()).map(toTeam);
+  }
+
   override async findByOwner(ownerId: string): Promise<Team[]> {
     const rows = await this.prisma.team.findMany({ where: { ownerId } });
     return rows.map(toTeam);

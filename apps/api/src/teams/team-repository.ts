@@ -14,6 +14,9 @@ export abstract class TeamRepository {
   /** The teams that exist among `ids`; unknown ids are skipped. Order is not guaranteed. */
   abstract findByIds(ids: readonly string[]): Promise<Team[]>;
 
+  /** Every stored team, for maintenance (see `Reconciler`). Order is not guaranteed. */
+  abstract findAll(): Promise<Team[]>;
+
   abstract findByOwner(ownerId: string): Promise<Team[]>;
 
   /** Deleting an unknown id is a no-op. */

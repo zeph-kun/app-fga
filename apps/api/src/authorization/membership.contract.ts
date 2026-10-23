@@ -37,6 +37,19 @@ export function membershipContract(adapter: string, create: () => Membership | P
       await expect(membership.remove(team, 'alice')).resolves.toBeUndefined();
     });
 
+    it('lists the teams that have at least one member', async () => {
+      const membership = await create();
+      const [withMembers, emptied] = [randomUUID(), randomUUID()];
+      await membership.add(withMembers, 'alice');
+      await membership.add(emptied, 'alice');
+      await membership.remove(emptied, 'alice');
+
+      const teams = await membership.teamsWithMembers();
+
+      expect(teams).toContain(withMembers);
+      expect(teams).not.toContain(emptied);
+    });
+
     it('lists the teams a user is a member of', async () => {
       const membership = await create();
       const [member, bystander] = [randomUUID(), randomUUID()];

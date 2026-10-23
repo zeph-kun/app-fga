@@ -21,6 +21,19 @@ export function teamRepositoryContract(
       expect(await repository.findById(randomUUID())).toBeUndefined();
     });
 
+    it('lists every stored team, and no longer one that was deleted', async () => {
+      const repository = await create();
+      const [kept, deleted] = [aTeam(), aTeam()];
+      await repository.save(kept);
+      await repository.save(deleted);
+      await repository.delete(deleted.id);
+
+      const all = await repository.findAll();
+
+      expect(all).toContainEqual(kept);
+      expect(all.map((t) => t.id)).not.toContain(deleted.id);
+    });
+
     it('replaces a team saved again under the same id', async () => {
       const repository = await create();
       const team = aTeam();

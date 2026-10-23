@@ -18,6 +18,10 @@ export class InMemoryTeamRepository extends TeamRepository {
     return Promise.resolve(ids.flatMap((id) => this.teams.get(id) ?? []));
   }
 
+  override findAll(): Promise<Team[]> {
+    return Promise.resolve([...this.teams.values()]);
+  }
+
   override findByOwner(ownerId: string): Promise<Team[]> {
     return Promise.resolve([...this.teams.values()].filter((t) => t.ownerId === ownerId));
   }
