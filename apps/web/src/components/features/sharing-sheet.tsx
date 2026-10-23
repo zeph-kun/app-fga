@@ -24,6 +24,7 @@ import { UserPicker } from "./user-picker";
 
 const ROLE_ITEMS = [
   { value: "viewer", label: "Viewer: can read" },
+  { value: "commenter", label: "Commenter: can read and comment" },
   { value: "editor", label: "Editor: can read and edit" },
 ];
 

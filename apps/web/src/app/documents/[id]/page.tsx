@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 import { AccessList } from "@/components/features/access-list";
+import { CommentsSection } from "@/components/features/comments-section";
 import { ConfirmDelete } from "@/components/features/confirm-delete";
 import { DocumentEditor } from "@/components/features/document-editor";
 import { ExpiryLabel } from "@/components/features/expiry-label";
@@ -14,12 +15,16 @@ import { PageShell } from "@/components/layout/page-shell";
 import {
   ApiError,
   apiGet,
+  commentSchema,
   documentViewSchema,
   folderSummarySchema,
+  meSchema,
   shareSchema,
   teamSchema,
 } from "@/lib/api";
 import {
+  addComment,
+  deleteComment,
   deleteDocument,
   moveDocument,
   shareDocument,
@@ -46,15 +51,18 @@ export default async function DocumentPage({ params, searchParams }: PageProps<"
   const doc = await loadDocument(id);
 
   const canEdit = doc.access === "owner" || doc.access === "editor";
+  const canComment = canEdit || doc.access === "commenter";
   const isOwner = doc.access === "owner";
-  const [shares, folders, teams, access] = await Promise.all([
+  const [comments, me, shares, folders, teams, access] = await Promise.all([
+    apiGet(`/documents/${id}/comments`, z.array(commentSchema)),
+    apiGet("/me", meSchema),
     isOwner ? apiGet(`/documents/${id}/shares`, z.array(shareSchema)) : [],
     apiGet("/folders", z.array(folderSummarySchema)),
     isOwner ? apiGet("/teams", z.array(teamSchema)) : [],
     isOwner ? apiGet(`/documents/${id}/access`, z.array(z.string())) : [],
   ]);
   const currentFolder = folders.find((folder) => folder.id === doc.folderId);
-  const movable = folders.filter((folder) => folder.access !== "viewer");
+  const movable = folders.filter((folder) => folder.access === "owner" || folder.access === "editor");
 
   return (
     <PageShell>
@@ -121,6 +129,17 @@ export default async function DocumentPage({ params, searchParams }: PageProps<"
         canEdit={canEdit}
         onSave={updateDocument.bind(null, id)}
       />
+
+      <div className="mt-8">
+        <CommentsSection
+          comments={comments}
+          currentUser={me.id}
+          canComment={canComment}
+          isOwner={isOwner}
+          onAdd={addComment.bind(null, id)}
+          onDelete={deleteComment.bind(null, id)}
+        />
+      </div>
 
       {isOwner && (
         <div className="mt-8">

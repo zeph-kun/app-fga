@@ -55,7 +55,7 @@ export default async function Home() {
                 <li key={folder.id}>
                   <DocumentDropTarget
                     folderId={folder.id}
-                    disabled={folder.access === "viewer"}
+                    disabled={folder.access !== "owner" && folder.access !== "editor"}
                     hint={`Move into ${folder.name}`}
                     onMove={moveDocument}
                     className="h-full"

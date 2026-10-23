@@ -8,9 +8,13 @@
 
 **Editor**: a User who can read and change a Document's title and content, but cannot delete it or manage sharing.
 
+**Commenter**: a User who can read a Document and add Comments to it, but cannot change its title or content. Between Viewer and Editor: an Editor can comment too.
+
 **Viewer**: a User who can only read a Document.
 
-**Grant**: the Editor or Viewer role given to a User or a Team on a Document or Folder, optionally with an Expiry. A User or Team has at most one Grant per Document or Folder. Access that is inherited from a Folder or comes through a Team is not a Grant of that User.
+**Comment**: a short text (up to 2,000 characters) that a User with at least the Commenter role posts on a Document. Everyone who can read the Document reads its Comments, oldest first. A Comment is deleted by its author or by the Document's Owner, and goes with the Document.
+
+**Grant**: the Editor, Commenter or Viewer role given to a User or a Team on a Document or Folder, optionally with an Expiry. A User or Team has at most one Grant per Document or Folder. Access that is inherited from a Folder or comes through a Team is not a Grant of that User.
 _Avoid_: Permission, access right
 
 **Share**: the action of creating a Grant for another User or a Team. Sharing again with a different role replaces the previous Grant.

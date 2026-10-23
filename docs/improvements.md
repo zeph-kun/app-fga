@@ -30,7 +30,7 @@ Un job ou une commande `reconcile` qui détecte les documents sans grant `owner`
 | Liens de partage / invitation par lien | Élevé | Nouveau sujet (`link`). À trancher: ADR. |
 | Dossiers imbriqués | Élevé | Exclu par l'ADR 0003. Il faudrait le rouvrir: `parent` récursif, risque de cycles. |
 | Transfert de propriété | Moyen | Aujourd'hui un seul Owner. Définir le terme dans le glossaire. |
-| Rôle "Commenter" (entre Viewer et Editor) | Élevé | Montre l'évolution du modèle sans toucher aux controllers (`can_comment`). |
+| ✅ Fait — Rôle "Commenter" (entre Viewer et Editor) | Élevé | `can_comment`, plus des commentaires minimaux sur un Document (ADR 0006). |
 | Historique de versions du contenu | Faible | Plus orienté produit que FGA. |
 | Pagination et recherche | Technique | `ListObjects` est plafonné à 1000. Combiner avec une recherche Postgres. |
 | Révocation en masse / "Shared with me" avec filtres | Faible | Bonne UX, peu de coût. |
@@ -56,6 +56,6 @@ Un job ou une commande `reconcile` qui détecte les documents sans grant `owner`
 1. ✅ Ajouter *Team* et *Grant* au glossaire (rapide).
 2. ✅ Extraire le module `Sharing` (gain de leverage immédiat, refactor sûr grâce aux tests existants).
 3. ✅ Séparer `Membership` de `Authorizer`.
-4. Ajouter le rôle "Commenter" en TDD, pour valider que le modèle reste souple.
+4. ✅ Ajouter le rôle "Commenter" en TDD, pour valider que le modèle reste souple.
 
 Option: lancer `grilling` sur la piste choisie pour trancher le design avant d'écrire du code.

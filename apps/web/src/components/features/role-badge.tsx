@@ -1,4 +1,4 @@
-import { Eye, Pencil, ShieldCheck } from "lucide-react";
+import { Eye, MessageSquare, Pencil, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { Role } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 const ROLES = {
   owner: { label: "Owner", Icon: ShieldCheck, className: "bg-primary/10 text-primary" },
   editor: { label: "Editor", Icon: Pencil, className: "bg-success/15 text-success" },
+  commenter: { label: "Commenter", Icon: MessageSquare, className: "bg-accent text-accent-foreground" },
   viewer: { label: "Viewer", Icon: Eye, className: "bg-muted text-muted-foreground" },
 } as const;
 

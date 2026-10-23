@@ -28,7 +28,7 @@ export const subjectSchema = z.discriminatedUnion("type", [
 export const shareSchema = z.object({
   subject: subjectSchema,
   name: z.string(),
-  role: z.enum(["editor", "viewer"]),
+  role: z.enum(["editor", "commenter", "viewer"]),
   expiresAt: z.coerce.date().optional(),
 });
 
@@ -36,6 +36,13 @@ export const meSchema = z.object({
   id: z.string(),
   /** Only Managers may create Teams. */
   canCreateTeam: z.boolean(),
+});
+
+export const commentSchema = z.object({
+  id: z.string(),
+  authorId: z.string(),
+  text: z.string(),
+  createdAt: z.coerce.date(),
 });
 
 export const teamSchema = z.object({
@@ -50,17 +57,17 @@ export const teamViewSchema = teamSchema.extend({
 });
 
 export const folderSummarySchema = folderSchema.extend({
-  access: z.enum(["owner", "editor", "viewer"]),
+  access: z.enum(["owner", "editor", "commenter", "viewer"]),
 });
 
 export const documentViewSchema = documentSchema.extend({
-  access: z.enum(["owner", "editor", "viewer"]),
+  access: z.enum(["owner", "editor", "commenter", "viewer"]),
   /** When the caller's access ends; absent if it never does. */
   accessExpiresAt: z.coerce.date().optional(),
 });
 
 export const folderViewSchema = folderSchema.extend({
-  access: z.enum(["owner", "editor", "viewer"]),
+  access: z.enum(["owner", "editor", "commenter", "viewer"]),
   documents: z.array(documentSchema),
 });
 
@@ -71,6 +78,7 @@ export type FolderView = z.infer<typeof folderViewSchema>;
 export type DocumentView = z.infer<typeof documentViewSchema>;
 export type Subject = z.infer<typeof subjectSchema>;
 export type Share = z.infer<typeof shareSchema>;
+export type Comment = z.infer<typeof commentSchema>;
 export type Team = z.infer<typeof teamSchema>;
 export type TeamView = z.infer<typeof teamViewSchema>;
 

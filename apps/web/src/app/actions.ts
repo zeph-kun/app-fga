@@ -14,7 +14,7 @@ import type { Subject } from "@/lib/api";
 const UNTITLED = "Untitled";
 const idSchema = z.string().uuid();
 const nameSchema = z.string().trim().min(1, "Enter a name.").max(200, "200 characters at most.");
-const roleSchema = z.enum(["editor", "viewer"]);
+const roleSchema = z.enum(["editor", "commenter", "viewer"]);
 const messageSchema = z.object({ message: z.string() });
 const subjectFormSchema = z.object({
   subjectType: z.enum(["user", "team"]),
@@ -122,6 +122,31 @@ export async function updateDocument(id: string, formData: FormData): Promise<Ac
     "Changes saved.",
   );
   if (!result.error) revalidatePath(`/documents/${id}`);
+  return result;
+}
+
+export async function addComment(
+  documentId: string,
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const text = z.string().trim().min(1, "Write a comment.").max(2000, "2,000 characters at most.").safeParse(formData.get("text"));
+  if (!text.success) return invalid(text.error);
+
+  const result = await run(
+    () => apiSend("POST", `/documents/${idSchema.parse(documentId)}/comments`, { text: text.data }),
+    "Comment added.",
+  );
+  if (!result.error) revalidatePath(`/documents/${documentId}`);
+  return result;
+}
+
+export async function deleteComment(documentId: string, commentId: string): Promise<ActionState> {
+  const result = await run(
+    () => apiSend("DELETE", `/documents/${idSchema.parse(documentId)}/comments/${idSchema.parse(commentId)}`),
+    "Comment deleted.",
+  );
+  if (!result.error) revalidatePath(`/documents/${documentId}`);
   return result;
 }
 
