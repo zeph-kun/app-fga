@@ -8,7 +8,18 @@ import { cn } from "cn";
 const DEBOUNCE_MS = 200;
 
 /** A username field that suggests the people who exist as you type; any text can still be submitted. */
-export function UserPicker({ id, name }: { id: string; name: string }) {
+export function UserPicker({
+  id,
+  name,
+  placeholder = "Search a username",
+  exclude = [],
+}: {
+  id: string;
+  name: string;
+  placeholder?: string;
+  /** Usernames not worth suggesting, such as the people already in the team. */
+  exclude?: readonly string[];
+}) {
   const [text, setText] = useState("");
   const [users, setUsers] = useState<string[]>([]);
 
@@ -26,7 +37,7 @@ export function UserPicker({ id, name }: { id: string; name: string }) {
 
   return (
     <Autocomplete.Root
-      items={users}
+      items={users.filter((user) => !exclude.includes(user))}
       mode="none"
       value={text}
       onValueChange={setText}
@@ -37,7 +48,7 @@ export function UserPicker({ id, name }: { id: string; name: string }) {
       <Autocomplete.Input
         id={id}
         autoComplete="off"
-        placeholder="Search a username"
+        placeholder={placeholder}
         className={cn(
           "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30",
         )}

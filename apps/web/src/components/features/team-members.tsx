@@ -4,9 +4,10 @@ import { Loader2, UserPlus, X } from "lucide-react";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import type { ActionState } from "@/lib/action-state";
 import { ActionForm, SubmitButton } from "./action-form";
+import { UserPicker } from "./user-picker";
 
 /** A team's roster. The owner can add and remove members here; a member can only see it. */
 export function TeamMembers({
@@ -24,6 +25,8 @@ export function TeamMembers({
 }) {
   const [pendingUser, setPendingUser] = useState<string>();
   const [pending, startTransition] = useTransition();
+  // The picker keeps its own text: a new key empties it once a member is added.
+  const [pickerKey, setPickerKey] = useState(0);
 
   function remove(userId: string): void {
     setPendingUser(userId);
@@ -38,8 +41,19 @@ export function TeamMembers({
   return (
     <div className="flex flex-col gap-4">
       {canManage && (
-        <ActionForm action={onAdd} className="flex gap-2">
-          <Input name="userId" required autoComplete="off" placeholder="Username to add" className="flex-1" />
+        <ActionForm action={onAdd} className="flex items-start gap-2" onSuccess={() => setPickerKey((key) => key + 1)}>
+          <div className="min-w-0 flex-1">
+            <Label htmlFor="team-member" className="sr-only">
+              Username to add
+            </Label>
+            <UserPicker
+              key={pickerKey}
+              id="team-member"
+              name="userId"
+              placeholder="Search a username to add"
+              exclude={members}
+            />
+          </div>
           <SubmitButton>
             <UserPlus aria-hidden />
             Add

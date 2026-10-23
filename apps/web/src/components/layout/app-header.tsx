@@ -19,7 +19,7 @@ export async function AppHeader() {
           app-fga
         </Link>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" render={<Link href="/teams" />}>
+          <Button variant="ghost" nativeButton={false} render={<Link href="/teams" />}>
             <Users2 aria-hidden />
             <span className="max-sm:sr-only">Teams</span>
           </Button>

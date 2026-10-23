@@ -55,6 +55,8 @@ export function SharingSheet({
 }) {
   const [subjectType, setSubjectType] = useState<"user" | "team">("user");
   const [pendingSubject, setPendingSubject] = useState<string>();
+  // The picker keeps its own text: a new key empties it once a Share is given.
+  const [pickerKey, setPickerKey] = useState(0);
   const [pending, startTransition] = useTransition();
 
   function remove(subject: Subject): void {
@@ -85,7 +87,7 @@ export function SharingSheet({
         </SheetHeader>
 
         <div className="flex flex-col gap-6 px-4 pb-4">
-          <ActionForm action={onShare} className="flex flex-col gap-3">
+          <ActionForm action={onShare} className="flex flex-col gap-3" onSuccess={() => setPickerKey((key) => key + 1)}>
             <RadioGroup
               name="subjectType"
               value={subjectType}
@@ -108,7 +110,7 @@ export function SharingSheet({
             {subjectType === "user" ? (
               <div className="flex flex-col gap-2">
                 <Label htmlFor="share-subject">Username</Label>
-                <UserPicker id="share-subject" name="subjectId" />
+                <UserPicker key={pickerKey} id="share-subject" name="subjectId" />
               </div>
             ) : (
               <div className="flex flex-col gap-2">
