@@ -1,20 +1,19 @@
-import { FileText, Plus } from "lucide-react";
+import { FileText } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 import { AccessList } from "@/components/features/access-list";
-import { CreateDialog } from "@/components/features/create-dialog";
 import { ConfirmDelete } from "@/components/features/confirm-delete";
 import { DocumentList } from "@/components/features/document-list";
 import { EmptyState } from "@/components/features/empty-state";
 import { InlineRenameTitle } from "@/components/features/inline-rename-title";
+import { NewDocumentButton } from "@/components/features/new-document-button";
 import { RoleBadge } from "@/components/features/role-badge";
 import { SharingSheet } from "@/components/features/sharing-sheet";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { PageShell } from "@/components/layout/page-shell";
 import { ApiError, apiGet, folderViewSchema, shareSchema, teamSchema } from "@/lib/api";
 import {
-  createDocument,
   deleteFolder,
   renameFolder,
   shareFolder,
@@ -65,17 +64,7 @@ export default async function FolderPage({ params }: PageProps<"/folders/[id]">)
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           {canEdit && (
-            <CreateDialog
-              trigger="New document"
-              title="New document in this folder"
-              description="People with access to this folder can open it."
-              fieldName="title"
-              label="Title"
-              placeholder="e.g. Meeting notes"
-              submitLabel="Create document"
-              action={createDocument.bind(null, id)}
-              icon={<Plus aria-hidden />}
-            />
+            <NewDocumentButton folderId={id} />
           )}
           {isOwner && (
             <SharingSheet

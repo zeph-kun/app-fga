@@ -28,6 +28,7 @@ export function CreateDialog({
   action,
   variant = "default",
   icon = <Plus aria-hidden />,
+  iconOnly = false,
 }: {
   trigger: string;
   title: string;
@@ -39,14 +40,24 @@ export function CreateDialog({
   action: (previous: ActionState, formData: FormData) => Promise<ActionState>;
   variant?: "default" | "outline";
   icon?: ReactNode;
+  /** A quiet icon button (named by `trigger`) instead of a labelled one, for a secondary action. */
+  iconOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button variant={variant} />}>
+      <DialogTrigger
+        render={
+          iconOnly ? (
+            <Button variant="ghost" size="icon" aria-label={trigger} title={trigger} />
+          ) : (
+            <Button variant={variant} />
+          )
+        }
+      >
         {icon}
-        {trigger}
+        {!iconOnly && trigger}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

@@ -20,7 +20,7 @@ npm run infra:up      # start Docker services (waits for healthy)
 npm run install:all   # install both apps
 npm run dev:api       # http://localhost:4000 (run `npm run db:deploy` once first)
 npm run dev:web       # http://localhost:3000
-npm test              # API unit tests (no Docker needed), property tests on the in-memory adapters included
+npm test              # API unit tests (no Docker needed, property tests on the in-memory adapters included), then the web's (Vitest, `src/lib`)
 npm --prefix apps/api run test:integration   # adapter contract and property tests against Docker Postgres and OpenFGA: their own `app_test` database and `app-fga-test` store (created and migrated on the first run), never the app's data
 npm run typecheck     # tsc --noEmit on both apps
 npm run reconcile     # list Postgres/OpenFGA differences (stop the API first); `npm run reconcile -- --apply` repairs them
@@ -56,6 +56,7 @@ Keycloak's User Profile requires `lastName`: a user created without one can't lo
 - A global rate limit (`RATE_LIMIT_PER_MINUTE`, default 120/min per IP, via `@nestjs/throttler`) protects every route; there is no per-route tuning yet.
 - OpenFGA requires a preshared key (`OPENFGA_API_TOKEN` / `OPENFGA_PRESHARED_KEY`, see `.env.example`): its HTTP API has no auth otherwise. This is why the Playground (`:3001`) is disabled — it only works with `authn-method: none`.
 - The access token never reaches the browser: it stays in the encrypted Auth.js cookie and is read server-side in `apps/web/src/lib/api.ts`. Mutations are Server Actions.
+- **The document editor saves as you type** through `Autosaver` (`apps/web/src/lib/autosaver.ts`: debounce, one save at a time, the last change always lands); `New document` creates an "Untitled" document in one click and opens it with the title selected (`?new=1`). Owners drag documents from the list onto folders (or out of one) with `document-drag.tsx`, which calls the same `moveDocument` action as the Move dialog, the keyboard alternative.
 - **Server Actions in `apps/web/src/app/actions.ts` answer with an `ActionState`** (`{ error?, success? }`) for expected failures (403, 409, validation) instead of throwing; actions that create or delete redirect. Forms use `ActionForm`/`SubmitButton`, direct calls use `useTransition`; errors show inline, successes as a toast.
 - **`apps/web/src/proxy.ts` must keep running `auth`** (Next 16's `proxy` replaces `middleware`): it is the only place the refreshed Keycloak tokens get written back to the session cookie. Without it the access token (~5 min) goes stale in the cookie and the app loops on `GET /` redirects. `lib/api.ts` redirects to `/` on an expired token so the next response carries the fresh cookie.
 - Next.js 16 differs from older versions; read `apps/web/node_modules/next/dist/docs/` before using an unfamiliar API.

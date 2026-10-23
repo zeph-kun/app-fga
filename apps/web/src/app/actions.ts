@@ -10,6 +10,8 @@ import type { ActionState } from "@/lib/action-state";
 import { ApiError, apiGet, apiPost, apiSend, documentSchema, folderSchema, teamSchema } from "@/lib/api";
 import type { Subject } from "@/lib/api";
 
+/** What a new document is called until its Owner types a title. */
+const UNTITLED = "Untitled";
 const idSchema = z.string().uuid();
 const nameSchema = z.string().trim().min(1, "Enter a name.").max(200, "200 characters at most.");
 const roleSchema = z.enum(["editor", "viewer"]);
@@ -92,27 +94,21 @@ export async function logout(): Promise<void> {
 
 // ---- Documents
 
-/** Creates a document (in a folder, or at the root) and opens it. */
-export async function createDocument(
-  folderId: string | null,
-  _previous: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const title = nameSchema.safeParse(formData.get("title"));
-  if (!title.success) return invalid(title.error);
-
+/** Creates an untitled document (in a folder, or at the root) and opens it with its title ready to type. */
+export async function createDocument(folderId: string | null): Promise<ActionState> {
   let id = "";
   const result = await run(async () => {
     const created = await apiPost(
       "/documents",
-      { title: title.data, content: "", folderId },
+      { title: UNTITLED, content: "", folderId },
       documentSchema,
     );
     id = created.id;
   });
   if (result.error) return result;
   revalidatePath("/");
-  redirect(`/documents/${id}`);
+  if (folderId) revalidatePath(`/folders/${folderId}`);
+  redirect(`/documents/${id}?new=1`);
 }
 
 export async function updateDocument(id: string, formData: FormData): Promise<ActionState> {
@@ -223,7 +219,7 @@ export async function createTeam(_previous: ActionState, formData: FormData): Pr
     id = (await apiPost("/teams", { name: name.data }, teamSchema)).id;
   });
   if (result.error) return result;
-  revalidatePath("/");
+  revalidatePath("/teams");
   redirect(`/teams/${id}`);
 }
 
@@ -235,15 +231,18 @@ export async function renameTeam(id: string, formData: FormData): Promise<Action
     () => apiSend("PATCH", `/teams/${idSchema.parse(id)}`, { name: name.data }),
     "Team renamed.",
   );
-  if (!result.error) revalidatePath(`/teams/${id}`);
+  if (!result.error) {
+    revalidatePath(`/teams/${id}`);
+    revalidatePath("/teams");
+  }
   return result;
 }
 
 export async function deleteTeam(id: string): Promise<ActionState> {
   const result = await run(() => apiSend("DELETE", `/teams/${idSchema.parse(id)}`));
   if (result.error) return result;
-  revalidatePath("/");
-  redirect("/");
+  revalidatePath("/teams");
+  redirect("/teams");
 }
 
 export async function addTeamMember(

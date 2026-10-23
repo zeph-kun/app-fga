@@ -40,8 +40,9 @@ export async function generateMetadata({ params }: PageProps<"/documents/[id]">)
   return { title: doc.title };
 }
 
-export default async function DocumentPage({ params }: PageProps<"/documents/[id]">) {
+export default async function DocumentPage({ params, searchParams }: PageProps<"/documents/[id]">) {
   const { id } = await params;
+  const { new: justCreated } = await searchParams;
   const doc = await loadDocument(id);
 
   const canEdit = doc.access === "owner" || doc.access === "editor";
@@ -113,7 +114,8 @@ export default async function DocumentPage({ params }: PageProps<"/documents/[id
       )}
 
       <DocumentEditor
-        key={`${doc.title}\u0000${doc.content}`}
+        key={doc.id}
+        autoFocusTitle={justCreated === "1" && canEdit}
         initialTitle={doc.title}
         initialContent={doc.content}
         canEdit={canEdit}

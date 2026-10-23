@@ -9,7 +9,7 @@
     "dev:api": "npm --prefix apps/api run start:dev",
     "dev:web": "npm --prefix apps/web run dev",
     "typecheck": "(cd apps/api && npx tsc --noEmit) && (cd apps/web && npx next typegen && npx tsc --noEmit)",
-    "test": "npm --prefix apps/api test",
+    "test": "npm --prefix apps/api test && npm --prefix apps/web test",
     "db:deploy": "npm --prefix apps/api run db:deploy",
     "reconcile": "npm --prefix apps/api run reconcile --"
   }

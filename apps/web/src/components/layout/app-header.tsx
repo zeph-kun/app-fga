@@ -1,7 +1,8 @@
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, Users2 } from "lucide-react";
 import Link from "next/link";
 import { logout } from "@/app/actions";
 import { auth } from "@/auth";
+import { Button } from "@/components/ui/button";
 import { UserMenu } from "./user-menu";
 
 export async function AppHeader() {
@@ -17,7 +18,13 @@ export async function AppHeader() {
           </span>
           app-fga
         </Link>
-        <UserMenu name={name} onSignOut={logout} />
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" render={<Link href="/teams" />}>
+            <Users2 aria-hidden />
+            <span className="max-sm:sr-only">Teams</span>
+          </Button>
+          <UserMenu name={name} onSignOut={logout} />
+        </div>
       </div>
     </header>
   );

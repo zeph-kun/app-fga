@@ -28,7 +28,7 @@ export default async function TeamPage({ params }: PageProps<"/teams/[id]">) {
 
   return (
     <PageShell>
-      <Breadcrumb items={[{ label: "Home", href: "/" }, { label: team.name }]} />
+      <Breadcrumb items={[{ label: "Teams", href: "/teams" }, { label: team.name }]} />
 
       <div className="flex flex-col gap-2">
         <InlineRenameTitle
