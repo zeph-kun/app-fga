@@ -18,12 +18,12 @@ const FOLDERS = ['f1', 'f2'] as const;
 const DOCUMENTS = ['d1', 'd2'] as const;
 const PERMISSIONS = ['can_view', 'can_edit', 'can_delete', 'can_share'] as const;
 
-const inThePast = () => new Date(Date.now() - 3_600_000);
-const inTheFuture = () => new Date(Date.now() + 3_600_000);
+/** Two distinct futures, so "the latest end" has something to choose between. */
+const EXPIRIES = { past: -3_600_000, soon: 3_600_000, later: 7_200_000 } as const;
 
 /** An operation on the Authorizer, over the small fixed universe above. */
 type Operation =
-  | { kind: 'grant'; subject: Subject; role: Role; resource: Resource; expiry: 'none' | 'past' | 'future' }
+  | { kind: 'grant'; subject: Subject; role: Role; resource: Resource; expiry: 'none' | keyof typeof EXPIRIES }
   | { kind: 'revoke'; subject: Subject; role: Role; resource: Resource }
   | { kind: 'revokeAll'; resource: Resource }
   | { kind: 'setParent'; documentId: string; folderId: string | null }
@@ -52,7 +52,7 @@ const operationArb: fc.Arbitrary<Operation> = fc.oneof(
     subject: subjectArb,
     role: fc.constantFrom('editor' as const, 'viewer' as const),
     resource: resourceArb,
-    expiry: fc.constantFrom('none' as const, 'past' as const, 'future' as const),
+    expiry: fc.constantFrom('none' as const, 'past' as const, 'soon' as const, 'later' as const),
   }),
   fc.record({
     kind: fc.constant('revoke' as const),
@@ -87,18 +87,21 @@ const ROLE_FOR: Record<Permission, Role> = {
  * independently of both adapters: the oracle they are compared with.
  */
 class Model {
-  private readonly grants = new Map<string, { subject: Subject; role: Role; resource: Resource; expired: boolean }>();
+  private readonly grants = new Map<
+    string,
+    { subject: Subject; role: Role; resource: Resource; expiresAt: Date | undefined }
+  >();
   private readonly parents = new Map<string, string>();
   private readonly members = new Map<string, Set<string>>();
 
-  apply(op: Operation): void {
+  apply(op: Operation, expiresAt: Date | undefined): void {
     switch (op.kind) {
       case 'grant':
         this.grants.set(keyOf(op.subject, op.role, op.resource), {
           subject: op.subject,
           role: op.role,
           resource: op.resource,
-          expired: op.expiry === 'past',
+          expiresAt,
         });
         return;
       case 'revoke':
@@ -130,6 +133,25 @@ class Model {
     return folder !== undefined && this.holdsOn(user, role, folderRef(folder));
   }
 
+  /**
+   * When the user's access ends: the latest end among every unexpired grant that reaches them
+   * (their own, their Teams', on the resource or its Folder), or null if one of them never ends.
+   */
+  expiryOn(user: string, resource: Resource): Date | null {
+    const folder = resource.type === 'document' ? this.parents.get(resource.id) : undefined;
+    const reaching = [...this.grants.values()].filter(
+      (g) =>
+        !isExpired(g.expiresAt) &&
+        [resource, ...(folder === undefined ? [] : [folderRef(folder)])].some(
+          (r) => r.type === g.resource.type && r.id === g.resource.id,
+        ) &&
+        (g.subject.type === 'user' ? g.subject.id === user : this.members.get(g.subject.id)?.has(user) === true),
+    );
+    if (reaching.some((g) => g.expiresAt === undefined)) return null;
+    const ends = reaching.map((g) => g.expiresAt?.getTime() ?? 0);
+    return ends.length === 0 ? null : new Date(Math.max(...ends));
+  }
+
   teamsOf(user: string): string[] {
     return [...this.members].filter(([, users]) => users.has(user)).map(([team]) => team);
   }
@@ -145,20 +167,24 @@ class Model {
   /** The direct, unexpired grants on a resource. */
   grantsOn(resource: Resource): string[] {
     return [...this.grants.values()]
-      .filter((g) => !g.expired && g.resource.type === resource.type && g.resource.id === resource.id)
+      .filter((g) => !isExpired(g.expiresAt) && g.resource.type === resource.type && g.resource.id === resource.id)
       .map((g) => `${g.subject.type}:${g.subject.id}:${g.role}`);
   }
 
   private holdsOn(user: string, role: Role, resource: Resource): boolean {
     return [...this.grants.values()].some(
       (g) =>
-        !g.expired &&
+        !isExpired(g.expiresAt) &&
         g.resource.type === resource.type &&
         g.resource.id === resource.id &&
         ROLES_GRANTING[role].includes(g.role) &&
         (g.subject.type === 'user' ? g.subject.id === user : this.members.get(g.subject.id)?.has(user) === true),
     );
   }
+}
+
+function isExpired(expiresAt: Date | undefined): boolean {
+  return expiresAt !== undefined && expiresAt.getTime() <= Date.now();
 }
 
 function keyOf(subject: Subject, role: Role, { type, id }: Resource): string {
@@ -187,10 +213,9 @@ function prefixed(run: string, op: Operation): Operation {
   }
 }
 
-async function perform({ authorizer, membership }: Wired, op: Operation): Promise<void> {
+async function perform({ authorizer, membership }: Wired, op: Operation, expiresAt: Date | undefined): Promise<void> {
   switch (op.kind) {
     case 'grant': {
-      const expiresAt = op.expiry === 'none' ? undefined : op.expiry === 'past' ? inThePast() : inTheFuture();
       return authorizer.grant(op.subject, op.role, op.resource, expiresAt);
     }
     case 'revoke':
@@ -230,8 +255,10 @@ export function authorizerPropertyContract(
             const model = new Model();
             for (const op of operations) {
               const real = prefixed(run, op);
-              await perform(wired, real);
-              model.apply(real);
+              const expiresAt =
+                real.kind === 'grant' && real.expiry !== 'none' ? new Date(Date.now() + EXPIRIES[real.expiry]) : undefined;
+              await perform(wired, real, expiresAt);
+              model.apply(real, expiresAt);
             }
 
             const id = (name: string) => `${run}-${name}`;
@@ -243,6 +270,11 @@ export function authorizerPropertyContract(
                     model.can(user, permission, resource),
                   );
                 }
+              }
+              for (const resource of resources) {
+                expect((await authorizer.expiryOn(user, resource))?.getTime(), `${user} expiry on ${resource.type}:${resource.id}`).toBe(
+                  model.expiryOn(user, resource)?.getTime(),
+                );
               }
               expect(sorted(await membership.teamsOf(user))).toEqual(sorted(model.teamsOf(user)));
               for (const permission of PERMISSIONS) {

@@ -21,5 +21,5 @@ authorizerPropertyContract(
     const membership = new OpenFgaMembership(store);
     return { authorizer: new OpenFgaAuthorizer(store, membership), membership };
   },
-  25,
+  60,
 );

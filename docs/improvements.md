@@ -11,7 +11,7 @@ Analyse faite avec les skills `codebase-design` et `domain-modeling` (mattpocock
 
 L'interface est plus large que nécessaire, et chaque nouvel adapter doit tout implémenter. Piste: garder `Authorizer` pour la vérification et les grants, et sortir les Teams dans un module `Membership`. Il aurait deux adapters (OpenFGA et in-memory), donc le seam serait réel. Test de suppression: `teams.service` dépend aujourd'hui de tout `Authorizer`.
 
-**b. `expiryOn` calcule dans la couche abstraite ce que le modèle FGA sait déjà.**
+**b. ✅ Couvert par les tests — `expiryOn` calcule dans la couche abstraite ce que le modèle FGA sait déjà.** Le contrat a maintenant les cas croisés (Team expirée plus Folder permanent, deux Teams, Team sur le Folder, grant expiré à côté d'un grant limité), et `authorizer.properties.ts` compare `expiryOn` à un oracle sur les deux adapters. La règle reste calculée côté API: la déplacer dans FGA n'est pas fait, ni l'ADR 2 ci-dessous.
 La règle "latest expiry parmi Share, Team et Folder" est réimplémentée à la main côté API, donc dupliquée par rapport à `model.fga` (risque de divergence). Le contrat devrait la couvrir avec des cas croisés: Team expirée plus Folder permanent, ou deux Teams.
 
 **c. Orchestration Postgres + OpenFGA répétée dans les services.**

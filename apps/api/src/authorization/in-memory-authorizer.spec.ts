@@ -9,4 +9,4 @@ function wire() {
 }
 
 authorizerContract('in-memory', wire);
-authorizerPropertyContract('in-memory', wire, 200);
+authorizerPropertyContract('in-memory', wire, 500);

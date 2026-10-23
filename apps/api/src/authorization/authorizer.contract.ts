@@ -392,6 +392,59 @@ export function authorizerContract(
         expect((await authorizer.expiryOn('alice', doc))?.getTime()).toBe(inTwoHours.getTime());
       });
 
+      it('lets a permanent Folder outlast an expired Team grant', async () => {
+        const { authorizer, membership } = await create();
+        const teamId = randomUUID();
+        const aFolder = folderRef(randomUUID());
+        const doc = documentRef(randomUUID());
+        await membership.add(teamId, 'alice');
+        await authorizer.setParent(doc.id, aFolder.id);
+        await authorizer.grant(teamSubject(teamId), 'viewer', doc, inThePast);
+        await authorizer.grant(userSubject('alice'), 'viewer', aFolder);
+
+        expect(await authorizer.expiryOn('alice', doc)).toBeNull();
+      });
+
+      it('takes the latest end among two Teams, and ignores a Team the user is not in', async () => {
+        const { authorizer, membership } = await create();
+        const [soon, later, other] = [randomUUID(), randomUUID(), randomUUID()];
+        const doc = documentRef(randomUUID());
+        const inTwoHours = new Date(inAnHour.getTime() + 3_600_000);
+        await membership.add(soon, 'alice');
+        await membership.add(later, 'alice');
+        await authorizer.grant(teamSubject(soon), 'viewer', doc, inAnHour);
+        await authorizer.grant(teamSubject(later), 'viewer', doc, inTwoHours);
+        await authorizer.grant(teamSubject(other), 'viewer', doc);
+
+        expect((await authorizer.expiryOn('alice', doc))?.getTime()).toBe(inTwoHours.getTime());
+      });
+
+      it('combines a Team grant on the Folder with a grant on the Document', async () => {
+        const { authorizer, membership } = await create();
+        const teamId = randomUUID();
+        const aFolder = folderRef(randomUUID());
+        const doc = documentRef(randomUUID());
+        const inTwoHours = new Date(inAnHour.getTime() + 3_600_000);
+        await membership.add(teamId, 'alice');
+        await authorizer.setParent(doc.id, aFolder.id);
+        await authorizer.grant(teamSubject(teamId), 'viewer', aFolder, inTwoHours);
+        await authorizer.grant(userSubject('alice'), 'editor', doc, inAnHour);
+
+        expect((await authorizer.expiryOn('alice', doc))?.getTime()).toBe(inTwoHours.getTime());
+      });
+
+      it('ignores an expired grant next to a limited one, and reports null when only expired ones remain', async () => {
+        const { authorizer } = await create();
+        const next = documentRef(randomUUID());
+        const gone = documentRef(randomUUID());
+        await authorizer.grant(userSubject('alice'), 'editor', next, inThePast);
+        await authorizer.grant(userSubject('alice'), 'viewer', next, inAnHour);
+        await authorizer.grant(userSubject('alice'), 'viewer', gone, inThePast);
+
+        expect((await authorizer.expiryOn('alice', next))?.getTime()).toBe(inAnHour.getTime());
+        expect(await authorizer.expiryOn('alice', gone)).toBeNull();
+      });
+
       it('follows the folder a document is in', async () => {
         const { authorizer } = await create();
         const aFolder = folderRef(randomUUID());
