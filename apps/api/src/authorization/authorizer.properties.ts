@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import fc from 'fast-check';
+import type { Wired } from './authorizer.contract.js';
 import {
-  type Authorizer,
   type Permission,
   type Resource,
   type Role,
@@ -187,7 +187,7 @@ function prefixed(run: string, op: Operation): Operation {
   }
 }
 
-async function perform(authorizer: Authorizer, op: Operation): Promise<void> {
+async function perform({ authorizer, membership }: Wired, op: Operation): Promise<void> {
   switch (op.kind) {
     case 'grant': {
       const expiresAt = op.expiry === 'none' ? undefined : op.expiry === 'past' ? inThePast() : inTheFuture();
@@ -200,9 +200,9 @@ async function perform(authorizer: Authorizer, op: Operation): Promise<void> {
     case 'setParent':
       return authorizer.setParent(op.documentId, op.folderId);
     case 'addMember':
-      return authorizer.addTeamMember(op.team, op.user);
+      return membership.add(op.team, op.user);
     case 'removeMember':
-      return authorizer.removeTeamMember(op.team, op.user);
+      return membership.remove(op.team, op.user);
   }
 }
 
@@ -215,7 +215,7 @@ const sorted = (values: string[]) => [...values].sort();
  */
 export function authorizerPropertyContract(
   adapter: string,
-  create: () => Authorizer | Promise<Authorizer>,
+  create: () => Wired | Promise<Wired>,
   runs: number,
 ): void {
   describe(`Authorizer properties (${adapter})`, () => {
@@ -224,12 +224,13 @@ export function authorizerPropertyContract(
       async () => {
         await fc.assert(
           fc.asyncProperty(fc.array(operationArb, { maxLength: 14 }), async (operations) => {
-            const authorizer = await create();
+            const wired = await create();
+            const { authorizer, membership } = wired;
             const run = randomUUID().slice(0, 8);
             const model = new Model();
             for (const op of operations) {
               const real = prefixed(run, op);
-              await perform(authorizer, real);
+              await perform(wired, real);
               model.apply(real);
             }
 
@@ -243,7 +244,7 @@ export function authorizerPropertyContract(
                   );
                 }
               }
-              expect(sorted(await authorizer.teamsOf(user))).toEqual(sorted(model.teamsOf(user)));
+              expect(sorted(await membership.teamsOf(user))).toEqual(sorted(model.teamsOf(user)));
               for (const permission of PERMISSIONS) {
                 for (const type of ['document', 'folder'] as const) {
                   const expected = resources
@@ -268,7 +269,7 @@ export function authorizerPropertyContract(
               expect(sorted(grants)).toEqual(sorted(model.grantsOn(resource)));
             }
             for (const team of TEAMS.map(id)) {
-              expect(sorted(await authorizer.teamMembers(team))).toEqual(sorted(model.teamMembers(team)));
+              expect(sorted(await membership.members(team))).toEqual(sorted(model.teamMembers(team)));
             }
             for (const document of DOCUMENTS.map(id)) {
               expect(await authorizer.parentOf(document)).toBe(model.parentOf(document));

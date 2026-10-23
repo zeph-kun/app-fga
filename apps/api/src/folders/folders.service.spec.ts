@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { folderRef, teamSubject, userSubject } from '../authorization/authorizer.js';
 import { InMemoryAuthorizer } from '../authorization/in-memory-authorizer.js';
+import { InMemoryMembership } from '../authorization/in-memory-membership.js';
 import { InMemoryDocumentRepository } from '../documents/in-memory-document-repository.js';
 import { InMemoryTeamRepository } from '../teams/in-memory-team-repository.js';
 import { Sharing } from '../sharing/sharing.js';
@@ -10,7 +11,8 @@ import { FoldersService } from './folders.service.js';
 import { InMemoryFolderRepository } from './in-memory-folder-repository.js';
 
 function setup() {
-  const authorizer = new InMemoryAuthorizer();
+  const membership = new InMemoryMembership();
+  const authorizer = new InMemoryAuthorizer(membership);
   const documents = new InMemoryDocumentRepository();
   const folders = new InMemoryFolderRepository();
   const users = new InMemoryUserDirectory(['alice', 'bob', 'carol']);
@@ -20,7 +22,7 @@ function setup() {
     documents,
     folders,
     service: new FoldersService(authorizer, folders, documents, new Sharing(authorizer, users, teams)),
-    teams: new TeamsService(authorizer, teams, users),
+    teams: new TeamsService(membership, teams, users),
   };
 }
 

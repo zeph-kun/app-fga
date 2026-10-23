@@ -12,6 +12,7 @@ import {
   teamSubject,
   userSubject,
 } from './authorizer.js';
+import { Membership } from './membership.js';
 import { OpenFgaStore, type Tuple, ignoreDuplicateWrites, ignoreMissingDeletes } from './openfga-store.js';
 
 const EXPIRY_CONDITION = 'non_expired';
@@ -28,8 +29,11 @@ const ACCESS_PROBES = [
 export class OpenFgaAuthorizer extends Authorizer {
   private readonly client: OpenFgaClient;
 
-  constructor(private readonly store: OpenFgaStore) {
-    super();
+  constructor(
+    private readonly store: OpenFgaStore,
+    membership: Membership,
+  ) {
+    super(membership);
     this.client = store.client;
   }
 
@@ -128,30 +132,6 @@ export class OpenFgaAuthorizer extends Authorizer {
     return parent ? parent.user.slice('folder:'.length) : null;
   }
 
-  override async teamMembers(teamId: string): Promise<string[]> {
-    const tuples = await this.store.tuplesOn(`team:${teamId}`);
-    return tuples
-      .filter((t) => t.relation === 'member' && t.user.startsWith('user:'))
-      .map((t) => t.user.slice('user:'.length));
-  }
-
-  override async addTeamMember(teamId: string, userId: string): Promise<void> {
-    await this.client.write({ writes: [memberTuple(teamId, userId)] }, ignoreDuplicateWrites);
-  }
-
-  override async removeTeamMember(teamId: string, userId: string): Promise<void> {
-    await this.client.write({ deletes: [memberTuple(teamId, userId)] }, ignoreMissingDeletes);
-  }
-
-  override async teamsOf(userId: string): Promise<string[]> {
-    const { objects } = await this.client.listObjects({
-      user: `user:${userId}`,
-      relation: 'member',
-      type: 'team',
-    });
-    return objects.map((object) => object.slice('team:'.length));
-  }
-
   override async usersWithAccess(resource: Resource, permission: Permission): Promise<string[]> {
     const { users } = await this.client.listUsers({
       object: objectRefOf(resource),
@@ -181,10 +161,6 @@ function subjectOf(user: string): Subject | undefined {
     return teamSubject(user.slice('team:'.length, -'#member'.length));
   }
   return undefined;
-}
-
-function memberTuple(teamId: string, userId: string): Tuple {
-  return { user: `user:${userId}`, relation: 'member', object: `team:${teamId}` };
 }
 
 const conditionContextSchema = z.object({ expires_at: z.string() });

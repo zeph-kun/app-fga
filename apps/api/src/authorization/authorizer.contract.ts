@@ -1,8 +1,15 @@
 import { randomUUID } from 'node:crypto';
+import type { Membership } from './membership.js';
 import { type Authorizer, documentRef, folderRef, teamSubject, userSubject } from './authorizer.js';
 
 const inThePast = new Date(Date.now() - 60_000);
 const inAnHour = new Date(Date.now() + 3_600_000);
+
+/** An Authorizer and the Membership it resolves Teams with: the two always go together. */
+export interface Wired {
+  readonly authorizer: Authorizer;
+  readonly membership: Membership;
+}
 
 /**
  * Behavior every Authorizer adapter must have. Run it against each adapter so the
@@ -11,17 +18,17 @@ const inAnHour = new Date(Date.now() + 3_600_000);
  */
 export function authorizerContract(
   adapter: string,
-  create: () => Authorizer | Promise<Authorizer>,
+  create: () => Wired | Promise<Wired>,
 ): void {
   describe(`Authorizer (${adapter})`, () => {
     it('denies a user with no grant', async () => {
-      const authorizer = await create();
+      const { authorizer } = await create();
 
       expect(await authorizer.can('alice', 'can_view', documentRef(randomUUID()))).toBe(false);
     });
 
     it('turns roles into permissions: owner implies editor implies viewer', async () => {
-      const authorizer = await create();
+      const { authorizer } = await create();
       const asOwner = documentRef(randomUUID());
       const asEditor = documentRef(randomUUID());
       const asViewer = documentRef(randomUUID());
@@ -41,7 +48,7 @@ export function authorizerContract(
     });
 
     it('reports the strongest access a user holds, or null without any', async () => {
-      const authorizer = await create();
+      const { authorizer } = await create();
       const asOwner = documentRef(randomUUID());
       const asEditor = documentRef(randomUUID());
       const asViewer = documentRef(randomUUID());
@@ -56,13 +63,13 @@ export function authorizerContract(
     });
 
     it('reports access inherited from a folder, given to a team, and not an expired one', async () => {
-      const authorizer = await create();
+      const { authorizer, membership } = await create();
       const folder = folderRef(randomUUID());
       const doc = documentRef(randomUUID());
       const team = randomUUID();
       await authorizer.grant(userSubject('alice'), 'owner', folder);
       await authorizer.setParent(doc.id, folder.id);
-      await authorizer.addTeamMember(team, 'carol');
+      await membership.add(team, 'carol');
       await authorizer.grant(teamSubject(team), 'viewer', doc);
       await authorizer.grant(userSubject('bob'), 'editor', doc, inThePast);
 
@@ -72,7 +79,7 @@ export function authorizerContract(
     });
 
     it('maps every resource of a type to the strongest role the user holds on it', async () => {
-      const authorizer = await create();
+      const { authorizer } = await create();
       const folder = folderRef(randomUUID());
       const owned = documentRef(randomUUID());
       const edited = documentRef(randomUUID());
@@ -100,7 +107,7 @@ export function authorizerContract(
     });
 
     it('applies the same roles to folders', async () => {
-      const authorizer = await create();
+      const { authorizer } = await create();
       const shared = folderRef(randomUUID());
       await authorizer.grant(userSubject('bob'), 'editor', shared);
 
@@ -110,7 +117,7 @@ export function authorizerContract(
     });
 
     it('removes a revoked grant, and revoking a missing one is a no-op', async () => {
-      const authorizer = await create();
+      const { authorizer } = await create();
       const doc = documentRef(randomUUID());
       await authorizer.grant(userSubject('bob'), 'editor', doc);
       await authorizer.revoke(userSubject('bob'), 'editor', doc);
@@ -120,7 +127,7 @@ export function authorizerContract(
     });
 
     it('replaces a grant given again, including its expiry', async () => {
-      const authorizer = await create();
+      const { authorizer } = await create();
       const doc = documentRef(randomUUID());
       await authorizer.grant(userSubject('bob'), 'viewer', doc, inThePast);
 
@@ -133,7 +140,7 @@ export function authorizerContract(
     });
 
     it('lists the resources of a type a user holds a permission on', async () => {
-      const authorizer = await create();
+      const { authorizer } = await create();
       const mine = randomUUID();
       const shared = randomUUID();
       const other = randomUUID();
@@ -157,7 +164,7 @@ export function authorizerContract(
     });
 
     it('lists the direct grants on a resource', async () => {
-      const authorizer = await create();
+      const { authorizer } = await create();
       const doc = documentRef(randomUUID());
       await authorizer.grant(userSubject('alice'), 'owner', doc);
       await authorizer.grant(userSubject('bob'), 'viewer', doc);
@@ -175,7 +182,7 @@ export function authorizerContract(
     });
 
     it('revokes every grant on a resource and leaves others alone', async () => {
-      const authorizer = await create();
+      const { authorizer } = await create();
       const doc = documentRef(randomUUID());
       const kept = documentRef(randomUUID());
       await authorizer.grant(userSubject('alice'), 'owner', doc);
@@ -191,7 +198,7 @@ export function authorizerContract(
 
     describe('documents in a folder', () => {
       async function setup() {
-        const authorizer = await create();
+        const { authorizer } = await create();
         const aFolder = folderRef(randomUUID());
         const doc = documentRef(randomUUID());
         await authorizer.setParent(doc.id, aFolder.id);
@@ -261,7 +268,7 @@ export function authorizerContract(
       });
 
       it('takes a document out of a folder it was never in without failing', async () => {
-        const authorizer = await create();
+        const { authorizer } = await create();
 
         await expect(authorizer.setParent(randomUUID(), null)).resolves.toBeUndefined();
       });
@@ -269,11 +276,11 @@ export function authorizerContract(
 
     describe('teams', () => {
       it('gives every member of a team the role shared with the team', async () => {
-        const authorizer = await create();
+        const { authorizer, membership } = await create();
         const teamId = randomUUID();
         const doc = documentRef(randomUUID());
-        await authorizer.addTeamMember(teamId, 'alice');
-        await authorizer.addTeamMember(teamId, 'bob');
+        await membership.add(teamId, 'alice');
+        await membership.add(teamId, 'bob');
         await authorizer.grant(teamSubject(teamId), 'editor', doc);
 
         expect(await authorizer.can('alice', 'can_edit', doc)).toBe(true);
@@ -281,55 +288,25 @@ export function authorizerContract(
         expect(await authorizer.can('carol', 'can_edit', doc)).toBe(false);
       });
 
-      it('lists the direct members of a team', async () => {
-        const authorizer = await create();
-        const teamId = randomUUID();
-        await authorizer.addTeamMember(teamId, 'alice');
-        await authorizer.addTeamMember(teamId, 'bob');
-
-        expect(await authorizer.teamMembers(teamId)).toEqual(expect.arrayContaining(['alice', 'bob']));
-      });
-
-      it('adds a team member, and adding one twice is a no-op', async () => {
-        const authorizer = await create();
-        const teamId = randomUUID();
-        await authorizer.addTeamMember(teamId, 'alice');
-
-        await expect(authorizer.addTeamMember(teamId, 'alice')).resolves.toBeUndefined();
-        expect(await authorizer.teamMembers(teamId)).toEqual(['alice']);
-      });
-
       it('removes a team member, and removing one twice is a no-op', async () => {
-        const authorizer = await create();
+        const { authorizer, membership } = await create();
         const teamId = randomUUID();
         const doc = documentRef(randomUUID());
-        await authorizer.addTeamMember(teamId, 'alice');
+        await membership.add(teamId, 'alice');
         await authorizer.grant(teamSubject(teamId), 'viewer', doc);
-        await authorizer.removeTeamMember(teamId, 'alice');
+        await membership.remove(teamId, 'alice');
 
         expect(await authorizer.can('alice', 'can_view', doc)).toBe(false);
-        await expect(authorizer.removeTeamMember(teamId, 'alice')).resolves.toBeUndefined();
-      });
-
-      it('lists the teams a user is a member of', async () => {
-        const authorizer = await create();
-        const [member, bystander] = [randomUUID(), randomUUID()];
-        const mine = randomUUID();
-        const other = randomUUID();
-        await authorizer.addTeamMember(mine, member);
-        await authorizer.addTeamMember(other, bystander);
-
-        expect(await authorizer.teamsOf(member)).toEqual([mine]);
-        expect(await authorizer.teamsOf(randomUUID())).toEqual([]);
+        await expect(membership.remove(teamId, 'alice')).resolves.toBeUndefined();
       });
 
       it('inherits a team grant on a folder into its documents', async () => {
-        const authorizer = await create();
+        const { authorizer, membership } = await create();
         const teamId = randomUUID();
         const aFolder = folderRef(randomUUID());
         const doc = documentRef(randomUUID());
         await authorizer.setParent(doc.id, aFolder.id);
-        await authorizer.addTeamMember(teamId, 'alice');
+        await membership.add(teamId, 'alice');
         await authorizer.grant(teamSubject(teamId), 'viewer', aFolder);
 
         expect(await authorizer.can('alice', 'can_view', doc)).toBe(true);
@@ -338,7 +315,7 @@ export function authorizerContract(
 
     describe('expiring grants', () => {
       it('allows access before the expiry and denies it after', async () => {
-        const authorizer = await create();
+        const { authorizer } = await create();
         const stillValid = documentRef(randomUUID());
         const alreadyExpired = documentRef(randomUUID());
         await authorizer.grant(userSubject('alice'), 'viewer', stillValid, inAnHour);
@@ -349,7 +326,7 @@ export function authorizerContract(
       });
 
       it('leaves an expired resource out of the list a user can access', async () => {
-        const authorizer = await create();
+        const { authorizer } = await create();
         const expired = documentRef(randomUUID());
         await authorizer.grant(userSubject('alice'), 'viewer', expired, inThePast);
 
@@ -357,17 +334,17 @@ export function authorizerContract(
       });
 
       it('expires a grant given to a team the same way', async () => {
-        const authorizer = await create();
+        const { authorizer, membership } = await create();
         const teamId = randomUUID();
         const doc = documentRef(randomUUID());
-        await authorizer.addTeamMember(teamId, 'alice');
+        await membership.add(teamId, 'alice');
         await authorizer.grant(teamSubject(teamId), 'viewer', doc, inThePast);
 
         expect(await authorizer.can('alice', 'can_view', doc)).toBe(false);
       });
 
       it('reports the expiry on grantsOn', async () => {
-        const authorizer = await create();
+        const { authorizer } = await create();
         const doc = documentRef(randomUUID());
         await authorizer.grant(userSubject('alice'), 'viewer', doc, inAnHour);
 
@@ -378,7 +355,7 @@ export function authorizerContract(
 
     describe('expiryOn', () => {
       it('reports when a time-limited grant ends, and null for a permanent one or no access', async () => {
-        const authorizer = await create();
+        const { authorizer } = await create();
         const limited = documentRef(randomUUID());
         const permanent = documentRef(randomUUID());
         await authorizer.grant(userSubject('alice'), 'viewer', limited, inAnHour);
@@ -390,11 +367,11 @@ export function authorizerContract(
       });
 
       it('follows a Team grant, and a permanent path outlasts a limited one', async () => {
-        const authorizer = await create();
+        const { authorizer, membership } = await create();
         const teamId = randomUUID();
         const viaTeam = documentRef(randomUUID());
         const both = documentRef(randomUUID());
-        await authorizer.addTeamMember(teamId, 'alice');
+        await membership.add(teamId, 'alice');
         await authorizer.grant(teamSubject(teamId), 'viewer', viaTeam, inAnHour);
         await authorizer.grant(teamSubject(teamId), 'viewer', both);
         await authorizer.grant(userSubject('alice'), 'viewer', both, inAnHour);
@@ -404,11 +381,11 @@ export function authorizerContract(
       });
 
       it('takes the latest end among limited paths', async () => {
-        const authorizer = await create();
+        const { authorizer, membership } = await create();
         const teamId = randomUUID();
         const doc = documentRef(randomUUID());
         const inTwoHours = new Date(inAnHour.getTime() + 3_600_000);
-        await authorizer.addTeamMember(teamId, 'alice');
+        await membership.add(teamId, 'alice');
         await authorizer.grant(teamSubject(teamId), 'viewer', doc, inTwoHours);
         await authorizer.grant(userSubject('alice'), 'editor', doc, inAnHour);
 
@@ -416,7 +393,7 @@ export function authorizerContract(
       });
 
       it('follows the folder a document is in', async () => {
-        const authorizer = await create();
+        const { authorizer } = await create();
         const aFolder = folderRef(randomUUID());
         const doc = documentRef(randomUUID());
         const permanentFolder = folderRef(randomUUID());
@@ -434,12 +411,12 @@ export function authorizerContract(
 
     describe('usersWithAccess', () => {
       it('resolves direct grants, team membership, and folder inheritance into a flat list', async () => {
-        const authorizer = await create();
+        const { authorizer, membership } = await create();
         const teamId = randomUUID();
         const aFolder = folderRef(randomUUID());
         const doc = documentRef(randomUUID());
         await authorizer.setParent(doc.id, aFolder.id);
-        await authorizer.addTeamMember(teamId, 'carol');
+        await membership.add(teamId, 'carol');
         await authorizer.grant(userSubject('alice'), 'owner', doc);
         await authorizer.grant(userSubject('bob'), 'viewer', aFolder);
         await authorizer.grant(teamSubject(teamId), 'viewer', doc);
@@ -450,7 +427,7 @@ export function authorizerContract(
       });
 
       it('excludes a user whose only grant has expired', async () => {
-        const authorizer = await create();
+        const { authorizer } = await create();
         const doc = documentRef(randomUUID());
         await authorizer.grant(userSubject('alice'), 'owner', doc);
         await authorizer.grant(userSubject('bob'), 'viewer', doc, inThePast);

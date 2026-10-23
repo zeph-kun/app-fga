@@ -7,6 +7,7 @@ import {
   type Role,
   type Subject,
 } from './authorizer.js';
+import type { Membership } from './membership.js';
 
 const IMPLIED_BY: Record<Role, readonly Role[]> = {
   owner: ['owner'],
@@ -29,10 +30,13 @@ interface StoredGrant extends Grant {
 export class InMemoryAuthorizer extends Authorizer {
   private readonly grants = new Map<string, StoredGrant>();
   private readonly parents = new Map<string, string>();
-  private readonly teams = new Map<string, Set<string>>();
 
-  override can(userId: string, permission: Permission, resource: Resource): Promise<boolean> {
-    return Promise.resolve(this.holds(userId, ROLE_OF[permission], resource));
+  constructor(membership: Membership) {
+    super(membership);
+  }
+
+  override async can(userId: string, permission: Permission, resource: Resource): Promise<boolean> {
+    return this.holds(userId, await this.membership.teamsOf(userId), ROLE_OF[permission], resource);
   }
 
   override grant(subject: Subject, role: Role, resource: Resource, expiresAt?: Date): Promise<void> {
@@ -60,7 +64,7 @@ export class InMemoryAuthorizer extends Authorizer {
     return Promise.resolve();
   }
 
-  override resourcesWhere(
+  override async resourcesWhere(
     userId: string,
     permission: Permission,
     type: ResourceType,
@@ -70,9 +74,8 @@ export class InMemoryAuthorizer extends Authorizer {
       if (resource.type === type) ids.add(resource.id);
     }
     if (type === 'document') for (const id of this.parents.keys()) ids.add(id);
-    return Promise.resolve(
-      [...ids].filter((id) => this.holds(userId, ROLE_OF[permission], { type, id })),
-    );
+    const teams = await this.membership.teamsOf(userId);
+    return [...ids].filter((id) => this.holds(userId, teams, ROLE_OF[permission], { type, id }));
   }
 
   override setParent(documentId: string, folderId: string | null): Promise<void> {
@@ -85,56 +88,35 @@ export class InMemoryAuthorizer extends Authorizer {
     return Promise.resolve(this.parents.get(documentId) ?? null);
   }
 
-  override teamMembers(teamId: string): Promise<string[]> {
-    return Promise.resolve([...(this.teams.get(teamId) ?? [])]);
-  }
-
-  override addTeamMember(teamId: string, userId: string): Promise<void> {
-    const members = this.teams.get(teamId) ?? new Set<string>();
-    members.add(userId);
-    this.teams.set(teamId, members);
-    return Promise.resolve();
-  }
-
-  override removeTeamMember(teamId: string, userId: string): Promise<void> {
-    this.teams.get(teamId)?.delete(userId);
-    return Promise.resolve();
-  }
-
-  override teamsOf(userId: string): Promise<string[]> {
-    const ids = [...this.teams.entries()].filter(([, members]) => members.has(userId)).map(([id]) => id);
-    return Promise.resolve(ids);
-  }
-
-  override usersWithAccess(resource: Resource, permission: Permission): Promise<string[]> {
+  override async usersWithAccess(resource: Resource, permission: Permission): Promise<string[]> {
     const role = ROLE_OF[permission];
     const users = new Set<string>();
-    const scan = (target: Resource) => {
+    const scan = async (target: Resource) => {
       for (const g of this.grants.values()) {
         if (!sameResource(g.resource, target) || !IMPLIED_BY[role].includes(g.role) || isExpired(g)) {
           continue;
         }
         if (g.subject.type === 'user') users.add(g.subject.id);
-        else for (const member of this.teams.get(g.subject.id) ?? []) users.add(member);
+        else for (const member of await this.membership.members(g.subject.id)) users.add(member);
       }
     };
-    scan(resource);
+    await scan(resource);
     const parent = resource.type === 'document' ? this.parents.get(resource.id) : undefined;
-    if (parent !== undefined) scan({ type: 'folder', id: parent });
-    return Promise.resolve([...users]);
+    if (parent !== undefined) await scan({ type: 'folder', id: parent });
+    return [...users];
   }
 
   /** A role is held directly (or through a higher role, or via team membership), or inherited from the document's folder. */
-  private holds(userId: string, role: Role, resource: Resource): boolean {
+  private holds(userId: string, teams: readonly string[], role: Role, resource: Resource): boolean {
     for (const g of this.grants.values()) {
       if (!sameResource(g.resource, resource) || !IMPLIED_BY[role].includes(g.role) || isExpired(g)) {
         continue;
       }
-      const matches = g.subject.type === 'user' ? g.subject.id === userId : this.teams.get(g.subject.id)?.has(userId);
+      const matches = g.subject.type === 'user' ? g.subject.id === userId : teams.includes(g.subject.id);
       if (matches) return true;
     }
     const parent = resource.type === 'document' ? this.parents.get(resource.id) : undefined;
-    return parent !== undefined && this.holds(userId, role, { type: 'folder', id: parent });
+    return parent !== undefined && this.holds(userId, teams, role, { type: 'folder', id: parent });
   }
 }
 

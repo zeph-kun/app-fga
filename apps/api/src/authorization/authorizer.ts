@@ -1,3 +1,5 @@
+import type { Membership } from './membership.js';
+
 /** What a User or Team is given on a resource. Roles are hierarchical: an owner is also an editor, and an editor is also a viewer. */
 export type Role = 'owner' | 'editor' | 'viewer';
 
@@ -33,6 +35,8 @@ export interface Grant {
  * and may be time-bound.
  */
 export abstract class Authorizer {
+  constructor(protected readonly membership: Membership) {}
+
   abstract can(userId: string, permission: Permission, resource: Resource): Promise<boolean>;
 
   /**
@@ -53,7 +57,7 @@ export abstract class Authorizer {
   async expiryOn(userId: string, resource: Resource): Promise<Date | null> {
     const parent = resource.type === 'document' ? await this.parentOf(resource.id) : null;
     const [teams, ...grantLists] = await Promise.all([
-      this.teamsOf(userId),
+      this.membership.teamsOf(userId),
       this.grantsOn(resource),
       ...(parent === null ? [] : [this.grantsOn(folderRef(parent))]),
     ]);
@@ -109,17 +113,6 @@ export abstract class Authorizer {
 
   /** Puts the document in a folder, replacing its previous folder; `null` takes it out of any folder. */
   abstract setParent(documentId: string, folderId: string | null): Promise<void>;
-
-  /** Direct members of a Team. */
-  abstract teamMembers(teamId: string): Promise<string[]>;
-
-  abstract addTeamMember(teamId: string, userId: string): Promise<void>;
-
-  /** Removing a membership that does not exist is a no-op. */
-  abstract removeTeamMember(teamId: string, userId: string): Promise<void>;
-
-  /** Ids of every Team the user is a direct member of. */
-  abstract teamsOf(userId: string): Promise<string[]>;
 
   /**
    * Every User who holds `permission` on `resource`, with Team membership and

@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { documentRef, teamSubject, userSubject } from '../authorization/authorizer.js';
 import { InMemoryAuthorizer } from '../authorization/in-memory-authorizer.js';
+import { InMemoryMembership } from '../authorization/in-memory-membership.js';
 import { InMemoryFolderRepository } from '../folders/in-memory-folder-repository.js';
 import { FoldersService } from '../folders/folders.service.js';
 import { InMemoryTeamRepository } from '../teams/in-memory-team-repository.js';
@@ -13,7 +14,8 @@ import { InMemoryDocumentRepository } from './in-memory-document-repository.js';
 
 /** Documents, Folders and Teams wired to the same storage and Authorizer, as in the app. */
 function setupWithFolders() {
-  const authorizer = new InMemoryAuthorizer();
+  const membership = new InMemoryMembership();
+  const authorizer = new InMemoryAuthorizer(membership);
   const documents = new InMemoryDocumentRepository();
   const folders = new InMemoryFolderRepository();
   const users = new InMemoryUserDirectory(['alice', 'bob', 'carol']);
@@ -22,12 +24,12 @@ function setupWithFolders() {
     authorizer,
     documents: new DocumentsService(authorizer, documents, folders, new Sharing(authorizer, users, teams)),
     folders: new FoldersService(authorizer, folders, documents, new Sharing(authorizer, users, teams)),
-    teams: new TeamsService(authorizer, teams, users),
+    teams: new TeamsService(membership, teams, users),
   };
 }
 
 function setup() {
-  const authorizer = new InMemoryAuthorizer();
+  const authorizer = new InMemoryAuthorizer(new InMemoryMembership());
   return new DocumentsService(
     authorizer,
     new InMemoryDocumentRepository(),
@@ -96,7 +98,7 @@ describe('DocumentsService', () => {
   });
 
   it('keeps documents when the service restarts on the same storage', async () => {
-    const authorizer = new InMemoryAuthorizer();
+    const authorizer = new InMemoryAuthorizer(new InMemoryMembership());
     const repository = new InMemoryDocumentRepository();
     const teams = new InMemoryTeamRepository();
     const users = new InMemoryUserDirectory();
@@ -119,7 +121,7 @@ describe('DocumentsService', () => {
   });
 
   it('removes every grant on a document when it is deleted', async () => {
-    const authorizer = new InMemoryAuthorizer();
+    const authorizer = new InMemoryAuthorizer(new InMemoryMembership());
     const service = new DocumentsService(
       authorizer,
       new InMemoryDocumentRepository(),
@@ -174,7 +176,7 @@ describe('DocumentsService', () => {
       }
     }
     const repository = new RecordingRepository();
-    const authorizer = new UnavailableAuthorizer();
+    const authorizer = new UnavailableAuthorizer(new InMemoryMembership());
     const service = new DocumentsService(
       authorizer,
       repository,
@@ -267,7 +269,7 @@ describe('DocumentsService', () => {
           return Promise.reject(new Error('OpenFGA unavailable'));
         }
       }
-      const authorizer = new UnavailableAuthorizer();
+      const authorizer = new UnavailableAuthorizer(new InMemoryMembership());
       const documentRepository = new InMemoryDocumentRepository();
       const folderRepository = new InMemoryFolderRepository();
       const users = new InMemoryUserDirectory();

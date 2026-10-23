@@ -1,14 +1,15 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { InMemoryAuthorizer } from '../authorization/in-memory-authorizer.js';
+import { InMemoryMembership } from '../authorization/in-memory-membership.js';
 import { InMemoryUserDirectory } from '../users/in-memory-user-directory.js';
 import { InMemoryTeamRepository } from './in-memory-team-repository.js';
 import { TeamsService } from './teams.service.js';
 
 function setup() {
-  const authorizer = new InMemoryAuthorizer();
+  const membership = new InMemoryMembership();
   const teams = new InMemoryTeamRepository();
   const users = new InMemoryUserDirectory(['alice', 'bob', 'carol']);
-  return { authorizer, teams, service: new TeamsService(authorizer, teams, users) };
+  return { membership, teams, service: new TeamsService(membership, teams, users) };
 }
 
 describe('TeamsService', () => {
@@ -77,14 +78,14 @@ describe('TeamsService', () => {
   });
 
   it('deletes a team and forgets its membership', async () => {
-    const { authorizer, service } = setup();
+    const { membership, service } = setup();
     const team = await service.create('alice', { name: 'Design' });
     await service.addMember('alice', team.id, 'bob');
 
     await service.remove('alice', team.id);
 
     await expect(service.get('alice', team.id)).rejects.toBeInstanceOf(NotFoundException);
-    expect(await authorizer.teamMembers(team.id)).toEqual([]);
+    expect(await membership.members(team.id)).toEqual([]);
   });
 
   it('lists the teams a user owns or belongs to', async () => {
