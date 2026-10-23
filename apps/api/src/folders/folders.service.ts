@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { Authorizer, type Permission, type Role, folderRef } from '../authorization/authorizer.js';
+import { Authorizer, type RolePermission, type Role, folderRef } from '../authorization/authorizer.js';
 import type { Document } from '../documents/document.js';
 import { DocumentRepository } from '../documents/document-repository.js';
 import { ResourceLifecycle } from '../lifecycle/resource-lifecycle.js';
@@ -101,7 +101,7 @@ export class FoldersService {
    * Users who cannot even view it get a 404 so existence is not leaked;
    * users who can view it but lack `permission` get a 403.
    */
-  private async require(userId: string, permission: Permission, id: string): Promise<Folder> {
+  private async require(userId: string, permission: RolePermission, id: string): Promise<Folder> {
     const folder = await this.folders.findById(id);
     const ref = folderRef(id);
     if (!folder || !(await this.authorizer.can(userId, 'can_view', ref))) {

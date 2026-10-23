@@ -1,5 +1,6 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { InMemoryAuthorizer } from '../authorization/in-memory-authorizer.js';
+import { InMemoryManagers } from '../authorization/in-memory-managers.js';
 import { InMemoryMembership } from '../authorization/in-memory-membership.js';
 import { InMemoryDocumentRepository } from '../documents/in-memory-document-repository.js';
 import { InMemoryFolderRepository } from '../folders/in-memory-folder-repository.js';
@@ -8,21 +9,45 @@ import { InMemoryUserDirectory } from '../users/in-memory-user-directory.js';
 import { InMemoryTeamRepository } from './in-memory-team-repository.js';
 import { TeamsService } from './teams.service.js';
 
+/** `alice` and `bob` are Managers; `carol` is not. */
 function setup() {
   const membership = new InMemoryMembership();
+  const managers = new InMemoryManagers(['alice', 'bob']);
+  const authorizer = new InMemoryAuthorizer(membership, managers);
   const teams = new InMemoryTeamRepository();
   const users = new InMemoryUserDirectory(['alice', 'bob', 'carol']);
   const lifecycle = new ResourceLifecycle(
-    new InMemoryAuthorizer(membership),
+    authorizer,
     new InMemoryDocumentRepository(),
     new InMemoryFolderRepository(),
     teams,
     membership,
   );
-  return { membership, teams, service: new TeamsService(membership, teams, users, lifecycle) };
+  return { membership, managers, teams, service: new TeamsService(authorizer, membership, teams, users, lifecycle) };
 }
 
 describe('TeamsService', () => {
+  it('refuses to create a team for someone who is not a Manager', async () => {
+    const { service } = setup();
+
+    await expect(service.create('carol', { name: 'Design' })).rejects.toThrow(
+      new ForbiddenException('Only managers can create teams.'),
+    );
+    expect(await service.list('carol')).toEqual([]);
+  });
+
+  it('lets an owner keep managing their team after they stop being a Manager', async () => {
+    const { service, managers } = setup();
+    const team = await service.create('alice', { name: 'Design' });
+    await managers.remove('alice');
+
+    await service.rename('alice', team.id, { name: 'Product' });
+    await service.addMember('alice', team.id, 'carol');
+
+    expect(await service.get('alice', team.id)).toMatchObject({ name: 'Product', members: ['alice', 'carol'] });
+    await expect(service.create('alice', { name: 'Another' })).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
   it('creates a team with its creator as the only member', async () => {
     const { service } = setup();
 

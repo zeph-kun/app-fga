@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { Authorizer, type Permission, type Role, documentRef, folderRef } from '../authorization/authorizer.js';
+import { Authorizer, type RolePermission, type Role, documentRef, folderRef } from '../authorization/authorizer.js';
 import { FolderRepository } from '../folders/folder-repository.js';
 import { ResourceLifecycle } from '../lifecycle/resource-lifecycle.js';
 import { Sharing, type ShareEntry, type ShareInput } from '../sharing/sharing.js';
@@ -123,7 +123,7 @@ export class DocumentsService {
   }
 
   /** Same 404/403 rules as `require`, for the Folder a Document is created in or moved to. */
-  private async requireFolder(userId: string, permission: Permission, id: string): Promise<void> {
+  private async requireFolder(userId: string, permission: RolePermission, id: string): Promise<void> {
     const ref = folderRef(id);
     if (!(await this.folders.findById(id)) || !(await this.authorizer.can(userId, 'can_view', ref))) {
       throw new NotFoundException('Folder not found');
@@ -138,7 +138,7 @@ export class DocumentsService {
    * Users who cannot even view it get a 404 so existence is not leaked;
    * users who can view it but lack `permission` get a 403.
    */
-  private async require(userId: string, permission: Permission, id: string): Promise<Document> {
+  private async require(userId: string, permission: RolePermission, id: string): Promise<Document> {
     const document = await this.repository.findById(id);
     const ref = documentRef(id);
     if (!document || !(await this.authorizer.can(userId, 'can_view', ref))) {

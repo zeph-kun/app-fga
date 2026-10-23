@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { type Authorizer, documentRef, teamSubject, userSubject } from '../authorization/authorizer.js';
 import { InMemoryAuthorizer } from '../authorization/in-memory-authorizer.js';
+import { InMemoryManagers } from '../authorization/in-memory-managers.js';
 import { InMemoryMembership } from '../authorization/in-memory-membership.js';
 import type { FolderRepository } from '../folders/folder-repository.js';
 import { InMemoryFolderRepository } from '../folders/in-memory-folder-repository.js';
@@ -36,7 +37,7 @@ const foldersService = (
 /** Documents, Folders and Teams wired to the same storage and Authorizer, as in the app. */
 function setupWithFolders() {
   const membership = new InMemoryMembership();
-  const authorizer = new InMemoryAuthorizer(membership);
+  const authorizer = new InMemoryAuthorizer(membership, new InMemoryManagers(['alice']));
   const documents = new InMemoryDocumentRepository();
   const folders = new InMemoryFolderRepository();
   const users = new InMemoryUserDirectory(['alice', 'bob', 'carol']);
@@ -46,6 +47,7 @@ function setupWithFolders() {
     documents: documentsService(authorizer, documents, folders, new Sharing(authorizer, users, teams)),
     folders: foldersService(authorizer, folders, documents, new Sharing(authorizer, users, teams)),
     teams: new TeamsService(
+      authorizer,
       membership,
       teams,
       users,

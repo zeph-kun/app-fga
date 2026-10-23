@@ -12,6 +12,11 @@ const envSchema = z.object({
   OPENFGA_API_TOKEN: z.string().min(1).default('dev-openfga-key'),
   OPENFGA_STORE_NAME: z.string().min(1).default('app-fga'),
   OPENFGA_MODEL_PATH: z.string().min(1).default('../../infra/openfga/model.fga'),
+  /** Usernames of the Managers, comma-separated: the only Users who may create Teams. */
+  MANAGERS: z
+    .string()
+    .default('florian,adham,jeremy')
+    .transform((list) => [...new Set(list.split(',').map((name) => name.trim()).filter(Boolean))]),
   /** Requests allowed per IP per minute, across the whole API. */
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(120),
 });

@@ -2,11 +2,14 @@ import {
   Authorizer,
   type Grant,
   type Permission,
+  type RolePermission,
   type Resource,
   type ResourceType,
   type Role,
   type Subject,
 } from './authorizer.js';
+import { InMemoryManagers } from './in-memory-managers.js';
+import type { Managers } from './managers.js';
 import type { Membership } from './membership.js';
 
 const IMPLIED_BY: Record<Role, readonly Role[]> = {
@@ -15,7 +18,7 @@ const IMPLIED_BY: Record<Role, readonly Role[]> = {
   viewer: ['viewer', 'editor', 'owner'],
 };
 
-const ROLE_OF: Record<Permission, Role> = {
+const ROLE_OF: Record<RolePermission, Role> = {
   can_view: 'viewer',
   can_edit: 'editor',
   can_delete: 'owner',
@@ -31,11 +34,15 @@ export class InMemoryAuthorizer extends Authorizer {
   private readonly grants = new Map<string, StoredGrant>();
   private readonly parents = new Map<string, string>();
 
-  constructor(membership: Membership) {
+  constructor(
+    membership: Membership,
+    private readonly managers: Managers = new InMemoryManagers(),
+  ) {
     super(membership);
   }
 
   override async can(userId: string, permission: Permission, resource: Resource): Promise<boolean> {
+    if (permission === 'can_create_team') return (await this.managers.all()).includes(userId);
     return this.holds(userId, await this.membership.teamsOf(userId), ROLE_OF[permission], resource);
   }
 
@@ -66,7 +73,7 @@ export class InMemoryAuthorizer extends Authorizer {
 
   override async resourcesWhere(
     userId: string,
-    permission: Permission,
+    permission: RolePermission,
     type: ResourceType,
   ): Promise<string[]> {
     const ids = new Set<string>();
@@ -97,7 +104,7 @@ export class InMemoryAuthorizer extends Authorizer {
     return Promise.resolve(this.parents.get(documentId) ?? null);
   }
 
-  override async usersWithAccess(resource: Resource, permission: Permission): Promise<string[]> {
+  override async usersWithAccess(resource: Resource, permission: RolePermission): Promise<string[]> {
     const role = ROLE_OF[permission];
     const users = new Set<string>();
     const scan = async (target: Resource) => {

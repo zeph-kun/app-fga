@@ -3,11 +3,13 @@ import fc from 'fast-check';
 import type { Wired } from './authorizer.contract.js';
 import {
   type Permission,
+  type RolePermission,
   type Resource,
   type Role,
   type Subject,
   documentRef,
   folderRef,
+  organizationRef,
   teamSubject,
   userSubject,
 } from './authorizer.js';
@@ -16,7 +18,7 @@ const USERS = ['u1', 'u2', 'u3'] as const;
 const TEAMS = ['t1', 't2'] as const;
 const FOLDERS = ['f1', 'f2'] as const;
 const DOCUMENTS = ['d1', 'd2'] as const;
-const PERMISSIONS = ['can_view', 'can_edit', 'can_delete', 'can_share'] as const;
+const PERMISSIONS = ['can_view', 'can_edit', 'can_delete', 'can_share'] as const satisfies readonly RolePermission[];
 
 /** Two distinct futures, so "the latest end" has something to choose between. */
 const EXPIRIES = { past: -3_600_000, soon: 3_600_000, later: 7_200_000 } as const;
@@ -28,7 +30,9 @@ type Operation =
   | { kind: 'revokeAll'; resource: Resource }
   | { kind: 'setParent'; documentId: string; folderId: string | null }
   | { kind: 'addMember'; team: string; user: string }
-  | { kind: 'removeMember'; team: string; user: string };
+  | { kind: 'removeMember'; team: string; user: string }
+  | { kind: 'appoint'; user: string }
+  | { kind: 'dismiss'; user: string };
 
 const resourceArb: fc.Arbitrary<Resource> = fc.oneof(
   fc.constantFrom(...FOLDERS).map(folderRef),
@@ -68,6 +72,8 @@ const operationArb: fc.Arbitrary<Operation> = fc.oneof(
   }),
   fc.record({ kind: fc.constant('addMember' as const), team: teamArb, user: userArb }),
   fc.record({ kind: fc.constant('removeMember' as const), team: teamArb, user: userArb }),
+  fc.record({ kind: fc.constant('appoint' as const), user: userArb }),
+  fc.record({ kind: fc.constant('dismiss' as const), user: userArb }),
 );
 
 const ROLES_GRANTING: Record<Role, readonly Role[]> = {
@@ -75,7 +81,7 @@ const ROLES_GRANTING: Record<Role, readonly Role[]> = {
   editor: ['editor', 'owner'],
   viewer: ['viewer', 'editor', 'owner'],
 };
-const ROLE_FOR: Record<Permission, Role> = {
+const ROLE_FOR: Record<RolePermission, Role> = {
   can_view: 'viewer',
   can_edit: 'editor',
   can_delete: 'owner',
@@ -93,6 +99,7 @@ class Model {
   >();
   private readonly parents = new Map<string, string>();
   private readonly members = new Map<string, Set<string>>();
+  private readonly managers = new Set<string>();
 
   apply(op: Operation, expiresAt: Date | undefined): void {
     switch (op.kind) {
@@ -123,10 +130,17 @@ class Model {
       case 'removeMember':
         this.members.get(op.team)?.delete(op.user);
         return;
+      case 'appoint':
+        this.managers.add(op.user);
+        return;
+      case 'dismiss':
+        this.managers.delete(op.user);
+        return;
     }
   }
 
   can(user: string, permission: Permission, resource: Resource): boolean {
+    if (permission === 'can_create_team') return this.managers.has(user);
     const role = ROLE_FOR[permission];
     if (this.holdsOn(user, role, resource)) return true;
     const folder = resource.type === 'document' ? this.parents.get(resource.id) : undefined;
@@ -217,10 +231,13 @@ function prefixed(run: string, op: Operation): Operation {
     case 'addMember':
     case 'removeMember':
       return { ...op, team: `${run}-${op.team}`, user: `${run}-${op.user}` };
+    case 'appoint':
+    case 'dismiss':
+      return { ...op, user: `${run}-${op.user}` };
   }
 }
 
-async function perform({ authorizer, membership }: Wired, op: Operation, expiresAt: Date | undefined): Promise<void> {
+async function perform({ authorizer, membership, managers }: Wired, op: Operation, expiresAt: Date | undefined): Promise<void> {
   switch (op.kind) {
     case 'grant': {
       return authorizer.grant(op.subject, op.role, op.resource, expiresAt);
@@ -235,6 +252,10 @@ async function perform({ authorizer, membership }: Wired, op: Operation, expires
       return membership.add(op.team, op.user);
     case 'removeMember':
       return membership.remove(op.team, op.user);
+    case 'appoint':
+      return managers.add(op.user);
+    case 'dismiss':
+      return managers.remove(op.user);
   }
 }
 
@@ -283,6 +304,9 @@ export function authorizerPropertyContract(
                   model.expiryOn(user, resource)?.getTime(),
                 );
               }
+              expect(await authorizer.can(user, 'can_create_team', organizationRef()), `${user} can_create_team`).toBe(
+                model.can(user, 'can_create_team', organizationRef()),
+              );
               expect(sorted(await membership.teamsOf(user))).toEqual(sorted(model.teamsOf(user)));
               for (const permission of PERMISSIONS) {
                 for (const type of ['document', 'folder'] as const) {

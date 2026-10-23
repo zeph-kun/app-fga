@@ -4,9 +4,13 @@ import type { Membership } from './membership.js';
 export type Role = 'owner' | 'editor' | 'viewer';
 
 /** What the API asks about. Each permission is held by a role and the roles above it. */
-export type Permission = 'can_view' | 'can_edit' | 'can_delete' | 'can_share';
+export type RolePermission = 'can_view' | 'can_edit' | 'can_delete' | 'can_share';
 
-export type ResourceType = 'document' | 'folder';
+/** What the API asks about: a role-based permission on a Document or Folder, or what only Managers may do. */
+export type Permission = RolePermission | 'can_create_team';
+
+/** `organization` is the single object that holds what applies to the whole app, such as who may create Teams. */
+export type ResourceType = 'document' | 'folder' | 'organization';
 
 export interface Resource {
   readonly type: ResourceType;
@@ -15,6 +19,7 @@ export interface Resource {
 
 export const documentRef = (id: string): Resource => ({ type: 'document', id });
 export const folderRef = (id: string): Resource => ({ type: 'folder', id });
+export const organizationRef = (): Resource => ({ type: 'organization', id: 'main' });
 
 /** Who a role is given to: a single User, or every member of a Team. */
 export type Subject = { readonly type: 'user'; readonly id: string } | { readonly type: 'team'; readonly id: string };
@@ -107,7 +112,7 @@ export abstract class Authorizer {
   /** Ids of every resource of `type` on which the user holds `permission`, inherited access included. */
   abstract resourcesWhere(
     userId: string,
-    permission: Permission,
+    permission: RolePermission,
     type: ResourceType,
   ): Promise<string[]>;
 
@@ -124,5 +129,5 @@ export abstract class Authorizer {
    * Every User who holds `permission` on `resource`, with Team membership and
    * folder inheritance already resolved — the "who has access" view.
    */
-  abstract usersWithAccess(resource: Resource, permission: Permission): Promise<string[]>;
+  abstract usersWithAccess(resource: Resource, permission: RolePermission): Promise<string[]>;
 }

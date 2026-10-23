@@ -5,6 +5,7 @@ import {
   Authorizer,
   type Grant,
   type Permission,
+  type RolePermission,
   type Resource,
   type ResourceType,
   type Role,
@@ -23,7 +24,7 @@ const ACCESS_PROBES = [
   { permission: 'can_delete', role: 'owner' },
   { permission: 'can_edit', role: 'editor' },
   { permission: 'can_view', role: 'viewer' },
-] as const satisfies readonly { permission: Permission; role: Role }[];
+] as const satisfies readonly { permission: RolePermission; role: Role }[];
 
 @Injectable()
 export class OpenFgaAuthorizer extends Authorizer {
@@ -100,7 +101,7 @@ export class OpenFgaAuthorizer extends Authorizer {
 
   override async resourcesWhere(
     userId: string,
-    permission: Permission,
+    permission: RolePermission,
     type: ResourceType,
   ): Promise<string[]> {
     const { objects } = await this.client.listObjects({
@@ -136,7 +137,7 @@ export class OpenFgaAuthorizer extends Authorizer {
     return parent ? parent.user.slice('folder:'.length) : null;
   }
 
-  override async usersWithAccess(resource: Resource, permission: Permission): Promise<string[]> {
+  override async usersWithAccess(resource: Resource, permission: RolePermission): Promise<string[]> {
     const { users } = await this.client.listUsers({
       object: objectRefOf(resource),
       relation: permission,

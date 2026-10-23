@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { Authorizer, organizationRef } from '../authorization/authorizer.js';
 import { Membership } from '../authorization/membership.js';
 import { ResourceLifecycle } from '../lifecycle/resource-lifecycle.js';
 import { UserDirectory } from '../users/user-directory.js';
@@ -23,13 +24,18 @@ export interface TeamView extends Team {
 @Injectable()
 export class TeamsService {
   constructor(
+    private readonly authorizer: Authorizer,
     private readonly membership: Membership,
     private readonly teams: TeamRepository,
     private readonly users: UserDirectory,
     private readonly lifecycle: ResourceLifecycle,
   ) {}
 
+  /** Only Managers create Teams; whoever owns one keeps managing it even if they stop being a Manager. */
   async create(userId: string, { name }: CreateTeamInput): Promise<Team> {
+    if (!(await this.authorizer.can(userId, 'can_create_team', organizationRef()))) {
+      throw new ForbiddenException('Only managers can create teams.');
+    }
     const team: Team = { id: randomUUID(), ownerId: userId, name };
     await this.lifecycle.createTeam(team);
     return team;

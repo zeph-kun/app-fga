@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { z } from 'zod';
+import { Authorizer, organizationRef } from '../authorization/authorizer.js';
 import type { AuthUser } from '../auth/access-token-verifier.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
@@ -32,11 +33,14 @@ const moveSchema = z.object({ folderId: z.string().uuid().nullable() });
 @Controller()
 @UseGuards(JwtAuthGuard)
 export class DocumentsController {
-  constructor(private readonly documents: DocumentsService) {}
+  constructor(
+    private readonly documents: DocumentsService,
+    private readonly authorizer: Authorizer,
+  ) {}
 
   @Get('me')
-  me(@CurrentUser() user: AuthUser): AuthUser {
-    return user;
+  async me(@CurrentUser() user: AuthUser): Promise<AuthUser & { canCreateTeam: boolean }> {
+    return { ...user, canCreateTeam: await this.authorizer.can(user.id, 'can_create_team', organizationRef()) };
   }
 
   @Get('documents')

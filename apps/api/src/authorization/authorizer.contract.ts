@@ -1,14 +1,23 @@
 import { randomUUID } from 'node:crypto';
+import type { Managers } from './managers.js';
 import type { Membership } from './membership.js';
-import { type Authorizer, documentRef, folderRef, teamSubject, userSubject } from './authorizer.js';
+import {
+  type Authorizer,
+  documentRef,
+  folderRef,
+  organizationRef,
+  teamSubject,
+  userSubject,
+} from './authorizer.js';
 
 const inThePast = new Date(Date.now() - 60_000);
 const inAnHour = new Date(Date.now() + 3_600_000);
 
-/** An Authorizer and the Membership it resolves Teams with: the two always go together. */
+/** An Authorizer with the Membership it resolves Teams with and the Managers it reads: they always go together. */
 export interface Wired {
   readonly authorizer: Authorizer;
   readonly membership: Membership;
+  readonly managers: Managers;
 }
 
 /**
@@ -25,6 +34,28 @@ export function authorizerContract(
       const { authorizer } = await create();
 
       expect(await authorizer.can('alice', 'can_view', documentRef(randomUUID()))).toBe(false);
+    });
+
+    it('lets Managers create Teams, and nobody else', async () => {
+      const { authorizer, managers } = await create();
+      const [manager, other] = [`manager-${randomUUID()}`, `other-${randomUUID()}`];
+      await managers.add(manager);
+
+      expect(await authorizer.can(manager, 'can_create_team', organizationRef())).toBe(true);
+      expect(await authorizer.can(other, 'can_create_team', organizationRef())).toBe(false);
+
+      await managers.remove(manager);
+      expect(await authorizer.can(manager, 'can_create_team', organizationRef())).toBe(false);
+    });
+
+    it('gives a Manager no access to anyone else\'s Documents', async () => {
+      const { authorizer, managers } = await create();
+      const manager = `manager-${randomUUID()}`;
+      await managers.add(manager);
+      const document = documentRef(randomUUID());
+      await authorizer.grant(userSubject('alice'), 'owner', document);
+
+      expect(await authorizer.can(manager, 'can_view', document)).toBe(false);
     });
 
     it('turns roles into permissions: owner implies editor implies viewer', async () => {

@@ -9,6 +9,14 @@ type team
   relations
     define member: [user]
 
+# The one object that holds what applies to the whole app: `organization:main`. Its
+# Managers (the `MANAGERS` setting) are the only Users who may create Teams, and that
+# gives them no access to anything of anyone else's.
+type organization
+  relations
+    define manager: [user]
+    define can_create_team: manager
+
 # Roles are what a User or Team is given; `can_*` permissions are what the API checks.
 type folder
   relations
