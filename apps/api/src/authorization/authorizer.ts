@@ -1,10 +1,14 @@
 import type { Membership } from './membership.js';
 
-/** What a User or Team is given on a resource. Roles are hierarchical: an owner is also an editor, and an editor is also a viewer. */
-export type Role = 'owner' | 'editor' | 'viewer';
+/** What a User or Team is given on a resource. Roles are hierarchical: an owner is also an editor, an editor a commenter, and a commenter a viewer. */
+export type Role = 'owner' | 'editor' | 'commenter' | 'viewer';
 
 /** What the API asks about. Each permission is held by a role and the roles above it. */
-export type RolePermission = 'can_view' | 'can_edit' | 'can_delete' | 'can_share';
+export type RolePermission = 'can_view' | 'can_comment' | 'can_edit' | 'can_delete' | 'can_share';
+
+/** The roles a Share can give: every role but the Owner's. */
+export const SHARED_ROLES = ['editor', 'commenter', 'viewer'] as const;
+export type SharedRole = (typeof SHARED_ROLES)[number];
 
 /** What the API asks about: a role-based permission on a Document or Folder, or what only Managers may do. */
 export type Permission = RolePermission | 'can_create_team';
@@ -51,6 +55,7 @@ export abstract class Authorizer {
   async accessOn(userId: string, resource: Resource): Promise<Role | null> {
     if (await this.can(userId, 'can_delete', resource)) return 'owner';
     if (await this.can(userId, 'can_edit', resource)) return 'editor';
+    if (await this.can(userId, 'can_comment', resource)) return 'commenter';
     if (await this.can(userId, 'can_view', resource)) return 'viewer';
     return null;
   }
@@ -88,13 +93,14 @@ export abstract class Authorizer {
    * id (what `accessOn` answers for one). For display: guard actions with `can`.
    */
   async rolesOn(userId: string, type: ResourceType): Promise<Map<string, Role>> {
-    const [viewable, editable, deletable] = await Promise.all(
-      (['can_view', 'can_edit', 'can_delete'] as const).map((permission) =>
+    const [viewable, commentable, editable, deletable] = await Promise.all(
+      (['can_view', 'can_comment', 'can_edit', 'can_delete'] as const).map((permission) =>
         this.resourcesWhere(userId, permission, type),
       ),
     );
     const roles = new Map<string, Role>();
     for (const id of viewable ?? []) roles.set(id, 'viewer');
+    for (const id of commentable ?? []) roles.set(id, 'commenter');
     for (const id of editable ?? []) roles.set(id, 'editor');
     for (const id of deletable ?? []) roles.set(id, 'owner');
     return roles;

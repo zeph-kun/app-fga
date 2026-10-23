@@ -1,12 +1,12 @@
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
-import { Authorizer, type Grant, type Resource, type Subject } from '../authorization/authorizer.js';
+import { Authorizer, SHARED_ROLES, type Grant, type Resource, type SharedRole, type Subject } from '../authorization/authorizer.js';
 import { TeamRepository } from '../teams/team-repository.js';
 import { UserDirectory } from '../users/user-directory.js';
 
 /** What the API takes to create or replace a Share: who, which role, for how long. */
 export interface ShareInput {
   readonly subject: Subject;
-  readonly role: 'editor' | 'viewer';
+  readonly role: SharedRole;
   /** Omitted or absent means the Share never expires. */
   readonly expiresInHours?: number;
 }
@@ -15,7 +15,7 @@ export interface ShareInput {
 export interface ShareEntry {
   readonly subject: Subject;
   readonly name: string;
-  readonly role: 'editor' | 'viewer';
+  readonly role: SharedRole;
   readonly expiresAt?: Date;
 }
 
@@ -46,7 +46,7 @@ function expiresAtFrom(expiresInHours: number | undefined): Date | undefined {
 }
 
 /** The Owner's grant is never listed as a Share. */
-function isSharedRole(grant: Grant): grant is Grant & { role: 'editor' | 'viewer' } {
+function isSharedRole(grant: Grant): grant is Grant & { role: SharedRole } {
   return grant.role !== 'owner';
 }
 
@@ -67,7 +67,7 @@ export class Sharing {
       throw new ForbiddenException('The owner already has full access');
     }
     await requireSubjectExists(subject, this.users, this.teams);
-    await this.authorizer.revoke(subject, role === 'editor' ? 'viewer' : 'editor', resource);
+    for (const other of SHARED_ROLES.filter((r) => r !== role)) await this.authorizer.revoke(subject, other, resource);
     await this.authorizer.grant(subject, role, resource, expiresAtFrom(expiresInHours));
   }
 
@@ -85,8 +85,7 @@ export class Sharing {
     if (subject.type === 'user' && subject.id === ownerId) {
       throw new ForbiddenException('The owner cannot be removed');
     }
-    await this.authorizer.revoke(subject, 'editor', resource);
-    await this.authorizer.revoke(subject, 'viewer', resource);
+    for (const role of SHARED_ROLES) await this.authorizer.revoke(subject, role, resource);
   }
 
   /** Every User who can view `resource`, Teams and folder inheritance resolved — for an access review. */

@@ -3,6 +3,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module.js';
 import { AuthorizationModule } from './authorization/authorization.module.js';
+import { CommentsModule } from './comments/comments.module.js';
 import { ENV, type Env } from './config/env.js';
 import { DatabaseModule } from './database/database.module.js';
 import { DocumentsModule } from './documents/documents.module.js';
@@ -14,6 +15,7 @@ import { UsersModule } from './users/users.module.js';
   imports: [
     AuthModule,
     AuthorizationModule,
+    CommentsModule,
     DatabaseModule,
     DocumentsModule,
     FoldersModule,

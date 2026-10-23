@@ -43,6 +43,33 @@ describe('Sharing', () => {
       ]);
     });
 
+    it('gives a User the Commenter role: they can comment but not edit', async () => {
+      const { authorizer, sharing } = await setup();
+
+      await sharing.share(doc, 'alice', { subject: userSubject('bob'), role: 'commenter' });
+
+      expect(await authorizer.can('bob', 'can_comment', doc)).toBe(true);
+      expect(await authorizer.can('bob', 'can_edit', doc)).toBe(false);
+      expect(await sharing.shares(doc)).toEqual([
+        { subject: userSubject('bob'), name: 'bob', role: 'commenter' },
+      ]);
+    });
+
+    it('leaves a single Grant whichever role the User is moved between', async () => {
+      const { sharing } = await setup();
+      await sharing.share(doc, 'alice', { subject: userSubject('bob'), role: 'editor' });
+
+      await sharing.share(doc, 'alice', { subject: userSubject('bob'), role: 'commenter' });
+      expect(await sharing.shares(doc)).toEqual([
+        { subject: userSubject('bob'), name: 'bob', role: 'commenter' },
+      ]);
+
+      await sharing.share(doc, 'alice', { subject: userSubject('bob'), role: 'viewer' });
+      expect(await sharing.shares(doc)).toEqual([
+        { subject: userSubject('bob'), name: 'bob', role: 'viewer' },
+      ]);
+    });
+
     it('makes a Grant expire after the given number of hours', async () => {
       vi.useFakeTimers({ now: new Date('2026-01-01T10:00:00Z') });
       try {
@@ -93,6 +120,16 @@ describe('Sharing', () => {
     it('removes a User\'s Grant whatever its role', async () => {
       const { authorizer, sharing } = await setup();
       await sharing.share(doc, 'alice', { subject: userSubject('bob'), role: 'editor' });
+
+      await sharing.unshare(doc, 'alice', userSubject('bob'));
+
+      expect(await authorizer.can('bob', 'can_view', doc)).toBe(false);
+      expect(await sharing.shares(doc)).toEqual([]);
+    });
+
+    it('removes a Commenter Grant too', async () => {
+      const { authorizer, sharing } = await setup();
+      await sharing.share(doc, 'alice', { subject: userSubject('bob'), role: 'commenter' });
 
       await sharing.unshare(doc, 'alice', userSubject('bob'));
 

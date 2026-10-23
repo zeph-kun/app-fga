@@ -78,6 +78,60 @@ export function authorizerContract(
       expect(await authorizer.can('alice', 'can_edit', asViewer)).toBe(false);
     });
 
+    it('puts Commenter between Viewer and Editor: it reads and comments but does not edit', async () => {
+      const { authorizer } = await create();
+      const asCommenter = documentRef(randomUUID());
+      const asEditor = documentRef(randomUUID());
+      const asViewer = documentRef(randomUUID());
+      await authorizer.grant(userSubject('alice'), 'commenter', asCommenter);
+      await authorizer.grant(userSubject('alice'), 'editor', asEditor);
+      await authorizer.grant(userSubject('alice'), 'viewer', asViewer);
+
+      expect(await authorizer.can('alice', 'can_view', asCommenter)).toBe(true);
+      expect(await authorizer.can('alice', 'can_comment', asCommenter)).toBe(true);
+      expect(await authorizer.can('alice', 'can_edit', asCommenter)).toBe(false);
+      expect(await authorizer.can('alice', 'can_delete', asCommenter)).toBe(false);
+      expect(await authorizer.can('alice', 'can_share', asCommenter)).toBe(false);
+      expect(await authorizer.can('alice', 'can_comment', asEditor)).toBe(true);
+      expect(await authorizer.can('alice', 'can_comment', asViewer)).toBe(false);
+    });
+
+    it('lets an Owner comment', async () => {
+      const { authorizer } = await create();
+      const doc = documentRef(randomUUID());
+      await authorizer.grant(userSubject('alice'), 'owner', doc);
+
+      expect(await authorizer.can('alice', 'can_comment', doc)).toBe(true);
+    });
+
+    it('reports Commenter as the strongest access, for one resource and for a whole type', async () => {
+      const { authorizer } = await create();
+      const doc = documentRef(randomUUID());
+      await authorizer.grant(userSubject('alice'), 'commenter', doc);
+
+      expect(await authorizer.accessOn('alice', doc)).toBe('commenter');
+      expect((await authorizer.rolesOn('alice', 'document')).get(doc.id)).toBe('commenter');
+    });
+
+    it('applies Commenter through a Folder, a Team and an expiry like the other roles', async () => {
+      const { authorizer, membership } = await create();
+      const folder = folderRef(randomUUID());
+      const inFolder = documentRef(randomUUID());
+      const teamId = randomUUID();
+      const viaTeam = documentRef(randomUUID());
+      const expired = documentRef(randomUUID());
+      await authorizer.grant(userSubject('alice'), 'owner', folder);
+      await authorizer.grant(userSubject('bob'), 'commenter', folder);
+      await authorizer.setParent(inFolder.id, folder.id);
+      await membership.add(teamId, 'carol');
+      await authorizer.grant(teamSubject(teamId), 'commenter', viaTeam);
+      await authorizer.grant(userSubject('dave'), 'commenter', expired, inThePast);
+
+      expect(await authorizer.can('bob', 'can_comment', inFolder)).toBe(true);
+      expect(await authorizer.can('carol', 'can_comment', viaTeam)).toBe(true);
+      expect(await authorizer.can('dave', 'can_comment', expired)).toBe(false);
+    });
+
     it('reports the strongest access a user holds, or null without any', async () => {
       const { authorizer } = await create();
       const asOwner = documentRef(randomUUID());

@@ -15,11 +15,13 @@ import type { Membership } from './membership.js';
 const IMPLIED_BY: Record<Role, readonly Role[]> = {
   owner: ['owner'],
   editor: ['editor', 'owner'],
-  viewer: ['viewer', 'editor', 'owner'],
+  commenter: ['commenter', 'editor', 'owner'],
+  viewer: ['viewer', 'commenter', 'editor', 'owner'],
 };
 
 const ROLE_OF: Record<RolePermission, Role> = {
   can_view: 'viewer',
+  can_comment: 'commenter',
   can_edit: 'editor',
   can_delete: 'owner',
   can_share: 'owner',

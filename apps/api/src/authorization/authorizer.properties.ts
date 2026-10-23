@@ -18,7 +18,7 @@ const USERS = ['u1', 'u2', 'u3'] as const;
 const TEAMS = ['t1', 't2'] as const;
 const FOLDERS = ['f1', 'f2'] as const;
 const DOCUMENTS = ['d1', 'd2'] as const;
-const PERMISSIONS = ['can_view', 'can_edit', 'can_delete', 'can_share'] as const satisfies readonly RolePermission[];
+const PERMISSIONS = ['can_view', 'can_comment', 'can_edit', 'can_delete', 'can_share'] as const satisfies readonly RolePermission[];
 
 /** Two distinct futures, so "the latest end" has something to choose between. */
 const EXPIRIES = { past: -3_600_000, soon: 3_600_000, later: 7_200_000 } as const;
@@ -54,14 +54,14 @@ const operationArb: fc.Arbitrary<Operation> = fc.oneof(
   fc.record({
     kind: fc.constant('grant' as const),
     subject: subjectArb,
-    role: fc.constantFrom('editor' as const, 'viewer' as const),
+    role: fc.constantFrom('editor' as const, 'commenter' as const, 'viewer' as const),
     resource: resourceArb,
     expiry: fc.constantFrom('none' as const, 'past' as const, 'soon' as const, 'later' as const),
   }),
   fc.record({
     kind: fc.constant('revoke' as const),
     subject: subjectArb,
-    role: fc.constantFrom('owner' as const, 'editor' as const, 'viewer' as const),
+    role: fc.constantFrom('owner' as const, 'editor' as const, 'commenter' as const, 'viewer' as const),
     resource: resourceArb,
   }),
   fc.record({ kind: fc.constant('revokeAll' as const), resource: resourceArb }),
@@ -79,10 +79,12 @@ const operationArb: fc.Arbitrary<Operation> = fc.oneof(
 const ROLES_GRANTING: Record<Role, readonly Role[]> = {
   owner: ['owner'],
   editor: ['editor', 'owner'],
-  viewer: ['viewer', 'editor', 'owner'],
+  commenter: ['commenter', 'editor', 'owner'],
+  viewer: ['viewer', 'commenter', 'editor', 'owner'],
 };
 const ROLE_FOR: Record<RolePermission, Role> = {
   can_view: 'viewer',
+  can_comment: 'commenter',
   can_edit: 'editor',
   can_delete: 'owner',
   can_share: 'owner',

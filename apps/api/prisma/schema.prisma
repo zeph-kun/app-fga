@@ -17,9 +17,24 @@ model Document {
   content   String
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+  comments  Comment[]
 
   @@index([folderId])
   @@map("documents")
+}
+
+// Who may read or write Comments is not stored here: it lives in OpenFGA (`can_view`, `can_comment`).
+model Comment {
+  id         String   @id @default(uuid()) @db.Uuid
+  documentId String   @map("document_id") @db.Uuid
+  authorId   String   @map("author_id")
+  text       String
+  createdAt  DateTime @default(now()) @map("created_at")
+  // Deleting a Document deletes its Comments.
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, createdAt])
+  @@map("comments")
 }
 
 model Folder {

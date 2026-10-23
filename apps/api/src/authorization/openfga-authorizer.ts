@@ -17,12 +17,13 @@ import { Membership } from './membership.js';
 import { OpenFgaStore, type Tuple, ignoreDuplicateWrites, ignoreMissingDeletes } from './openfga-store.js';
 
 const EXPIRY_CONDITION = 'non_expired';
-const roleSchema = z.enum(['owner', 'editor', 'viewer']);
+const roleSchema = z.enum(['owner', 'editor', 'commenter', 'viewer']);
 
 /** Strongest first: the first permission held tells the role. */
 const ACCESS_PROBES = [
   { permission: 'can_delete', role: 'owner' },
   { permission: 'can_edit', role: 'editor' },
+  { permission: 'can_comment', role: 'commenter' },
   { permission: 'can_view', role: 'viewer' },
 ] as const satisfies readonly { permission: RolePermission; role: Role }[];
 

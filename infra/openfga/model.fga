@@ -22,9 +22,11 @@ type folder
   relations
     define owner: [user]
     define editor: [user, user with non_expired, team#member, team#member with non_expired] or owner
-    define viewer: [user, user with non_expired, team#member, team#member with non_expired] or editor
+    define commenter: [user, user with non_expired, team#member, team#member with non_expired] or editor
+    define viewer: [user, user with non_expired, team#member, team#member with non_expired] or commenter
 
     define can_view: viewer
+    define can_comment: commenter
     define can_edit: editor
     define can_delete: owner
     define can_share: owner
@@ -35,9 +37,11 @@ type document
     define parent: [folder]
     define owner: [user] or owner from parent
     define editor: [user, user with non_expired, team#member, team#member with non_expired] or owner or editor from parent
-    define viewer: [user, user with non_expired, team#member, team#member with non_expired] or editor or viewer from parent
+    define commenter: [user, user with non_expired, team#member, team#member with non_expired] or editor or commenter from parent
+    define viewer: [user, user with non_expired, team#member, team#member with non_expired] or commenter or viewer from parent
 
     define can_view: viewer
+    define can_comment: commenter
     define can_edit: editor
     define can_delete: owner
     define can_share: owner

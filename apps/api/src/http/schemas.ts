@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SHARED_ROLES } from '../authorization/authorizer.js';
 
 /**
  * A Keycloak username as typed by another user to share with. Trimmed so that
@@ -16,6 +17,9 @@ export const subjectSchema = z.discriminatedUnion('type', [
 /** The body of a Share request: who, which role, and for how long (never, if omitted). */
 export const shareSchema = z.object({
   subject: subjectSchema,
-  role: z.enum(['editor', 'viewer']),
+  role: z.enum(SHARED_ROLES),
   expiresInHours: z.number().positive().max(24 * 365).optional(),
 });
+
+/** The body of a comment: 1 to 2,000 characters once trimmed. */
+export const commentSchema = z.object({ text: z.string().trim().min(1, 'Write a comment.').max(2000, '2,000 characters at most.') });
