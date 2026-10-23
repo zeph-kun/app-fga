@@ -20,8 +20,8 @@ npm run infra:up      # start Docker services (waits for healthy)
 npm run install:all   # install both apps
 npm run dev:api       # http://localhost:4000 (run `npm run db:deploy` once first)
 npm run dev:web       # http://localhost:3000
-npm test              # API unit tests (no Docker needed)
-npm --prefix apps/api run test:integration   # adapter contract tests against Docker Postgres and OpenFGA
+npm test              # API unit tests (no Docker needed), property tests on the in-memory adapters included
+npm --prefix apps/api run test:integration   # adapter contract and property tests against Docker Postgres and OpenFGA
 npm run typecheck     # tsc --noEmit on both apps
 ```
 
@@ -33,16 +33,19 @@ Keycloak's User Profile requires `lastName`: a user created without one can't lo
 
 - **TypeScript is strict** in both apps (`strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `noImplicitReturns`). No `any`, no non-null `!`, no `as` casts to silence errors; parse external data (env, HTTP bodies, API responses) with zod.
 - API is ESM (`nodenext`): relative imports need a `.js` extension.
-- Use `GLOSSARY.md` terms exactly (Document, Folder, Owner, Editor, Viewer, Share, Move). The UI copy is in English for that reason.
+- Do not run `npm run format` in `apps/api`: the committed code does not follow its `.prettierrc`, so it would reformat most of `src/`. Match the style of the surrounding code.
+- Use `GLOSSARY.md` terms exactly (Document, Folder, Owner, Editor, Viewer, Grant, Share, Team, Move). The UI copy is in English for that reason.
 - **Web UI**: colors and radii are tokens in `apps/web/src/app/globals.css` (OKLCH, light and dark designed separately, contrast checked for WCAG AA); never hard-code colors. Primitives live in `src/components/ui` (shadcn, generated: change them by `className`), app pieces in `src/components/features` and `src/components/layout`. Roles are always shown with `RoleBadge`. Every list has an empty state, every page a loading/error/not-found state.
 - Development style follows the mattpocock skills: `tdd` (red-green-refactor through the public interface), `domain-modeling` (update GLOSSARY.md / ADRs as terms and decisions crystallise), `codebase-design` (deep modules, small interfaces, a seam only where something varies).
 
 ## Architecture rules
 
-- **All authorization goes through the `Authorizer` module** (`apps/api/src/authorization`). Controllers and services never talk to the OpenFGA SDK, and ask about `can_*` permissions on a `Resource` (`documentRef`/`folderRef`), never about roles. Two adapters exist: `OpenFgaAuthorizer` (prod) and `InMemoryAuthorizer` (tests), both held to `authorizer.contract.ts`.
+- **All authorization goes through the `Authorizer` module** (`apps/api/src/authorization`). Controllers and services never talk to the OpenFGA SDK, and ask about `can_*` permissions on a `Resource` (`documentRef`/`folderRef`), never about roles. Two adapters exist: `OpenFgaAuthorizer` (prod) and `InMemoryAuthorizer` (tests), both held to `authorizer.contract.ts` and to `authorizer.properties.ts` (random sequences of grants, revokes, moves and membership changes, compared to a plain model of `model.fga`).
+- **Who belongs to a Team goes through `Membership`** (same folder), not the `Authorizer`: `OpenFgaMembership` and `InMemoryMembership`, held to `membership.contract.ts`. The `Authorizer` takes a `Membership` to resolve Teams, so an in-memory test wires one `InMemoryMembership` into both the `InMemoryAuthorizer` and `TeamsService`. `OpenFgaAuthorizer` and `OpenFgaMembership` share one `OpenFgaStore` (client, store and model bootstrap).
+- **Giving, listing and revoking Grants goes through `Sharing`** (`apps/api/src/sharing`). It does not authorize: the Documents and Folders services check `can_share` first, then pass the resource and its Owner.
 - **Documents and Folders are stored through `DocumentRepository` / `FolderRepository`** (`apps/api/src/documents`, `apps/api/src/folders`); only the `Prisma*Repository` adapters touch Prisma. Run the shared contract (`*-repository.contract.ts`) against any new adapter. The generated client (`src/generated`) is git-ignored and rebuilt by `postinstall`.
-- The OpenFGA model lives in `infra/openfga/model.fga`; the API creates the store and writes the model at startup. Keep `InMemoryAuthorizer` in sync with it.
-- Folders: one parent per document, roles inherited, no nesting (see `docs/adr/0003-folders-inherit-roles-and-permissions-are-checked.md`). Changing `infra/openfga/model.fga` means updating `InMemoryAuthorizer` and `authorizer.contract.ts` too.
+- The OpenFGA model lives in `infra/openfga/model.fga`; the API creates the store and writes the model at startup. Keep `InMemoryAuthorizer` and the oracle in `authorizer.properties.ts` in sync with it.
+- Folders: one parent per document, roles inherited, no nesting (see `docs/adr/0003-folders-inherit-roles-and-permissions-are-checked.md`). Changing `infra/openfga/model.fga` means updating `InMemoryAuthorizer`, `authorizer.contract.ts` and `authorizer.properties.ts` too.
 - FGA subject is `user:<Keycloak preferred_username>` (see `docs/adr/0001-username-as-fga-subject.md`).
 - Documents the caller cannot view return 404, not 403, so existence is not leaked.
 - Sharing a Document or Folder with its own Owner is rejected (403): the Owner already has full access.
