@@ -1,14 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import {
-  Authorizer,
-  type Permission,
-  type Role,
-  documentRef,
-  folderRef,
-  userSubject,
-} from '../authorization/authorizer.js';
+import { Authorizer, type Permission, type Role, documentRef, folderRef } from '../authorization/authorizer.js';
 import { FolderRepository } from '../folders/folder-repository.js';
+import { ResourceLifecycle } from '../lifecycle/resource-lifecycle.js';
 import { Sharing, type ShareEntry, type ShareInput } from '../sharing/sharing.js';
 import type { Document } from './document.js';
 import { DocumentRepository } from './document-repository.js';
@@ -45,22 +39,13 @@ export class DocumentsService {
     private readonly repository: DocumentRepository,
     private readonly folders: FolderRepository,
     private readonly sharing: Sharing,
+    private readonly lifecycle: ResourceLifecycle,
   ) {}
 
   async create(userId: string, { folderId = null, ...input }: CreateDocumentInput): Promise<Document> {
     if (folderId !== null) await this.requireFolder(userId, 'can_edit', folderId);
     const document: Document = { id: randomUUID(), ownerId: userId, folderId, ...input };
-    await this.repository.save(document);
-    try {
-      await this.authorizer.grant(userSubject(userId), 'owner', documentRef(document.id));
-      if (folderId !== null) await this.authorizer.setParent(document.id, folderId);
-    } catch (error) {
-      // Without its Owner grant nobody could ever open the document: do not keep it.
-      await this.repository.delete(document.id);
-      // Best effort: the original error is the one worth reporting.
-      await this.authorizer.revokeAll(documentRef(document.id)).catch(() => undefined);
-      throw error;
-    }
+    await this.lifecycle.createDocument(document);
     return document;
   }
 
@@ -108,21 +93,12 @@ export class DocumentsService {
   async move(userId: string, id: string, folderId: string | null): Promise<Document> {
     const current = await this.require(userId, 'can_share', id);
     if (folderId !== null) await this.requireFolder(userId, 'can_edit', folderId);
-    const moved: Document = { ...current, folderId };
-    await this.repository.save(moved);
-    try {
-      await this.authorizer.setParent(id, folderId);
-    } catch (error) {
-      await this.repository.save(current);
-      throw error;
-    }
-    return moved;
+    return this.lifecycle.moveDocument(current, folderId);
   }
 
   async remove(userId: string, id: string): Promise<void> {
     await this.require(userId, 'can_delete', id);
-    await this.repository.delete(id);
-    await this.authorizer.revokeAll(documentRef(id));
+    await this.lifecycle.deleteDocument(id);
   }
 
   async share(userId: string, id: string, input: ShareInput): Promise<void> {

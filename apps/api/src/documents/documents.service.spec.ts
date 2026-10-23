@@ -1,16 +1,33 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { documentRef, teamSubject, userSubject } from '../authorization/authorizer.js';
+import { type Authorizer, documentRef, teamSubject, userSubject } from '../authorization/authorizer.js';
 import { InMemoryAuthorizer } from '../authorization/in-memory-authorizer.js';
 import { InMemoryMembership } from '../authorization/in-memory-membership.js';
+import type { FolderRepository } from '../folders/folder-repository.js';
 import { InMemoryFolderRepository } from '../folders/in-memory-folder-repository.js';
 import { FoldersService } from '../folders/folders.service.js';
 import { InMemoryTeamRepository } from '../teams/in-memory-team-repository.js';
+import { ResourceLifecycle } from '../lifecycle/resource-lifecycle.js';
 import { Sharing } from '../sharing/sharing.js';
 import { TeamsService } from '../teams/teams.service.js';
 import { InMemoryUserDirectory } from '../users/in-memory-user-directory.js';
 import type { Document } from './document.js';
+import type { DocumentRepository } from './document-repository.js';
 import { DocumentsService } from './documents.service.js';
 import { InMemoryDocumentRepository } from './in-memory-document-repository.js';
+
+const documentsService = (
+  authorizer: Authorizer,
+  documents: DocumentRepository,
+  folders: FolderRepository,
+  sharing: Sharing,
+) => new DocumentsService(authorizer, documents, folders, sharing, new ResourceLifecycle(authorizer, documents, folders));
+
+const foldersService = (
+  authorizer: Authorizer,
+  folders: FolderRepository,
+  documents: DocumentRepository,
+  sharing: Sharing,
+) => new FoldersService(authorizer, folders, documents, sharing, new ResourceLifecycle(authorizer, documents, folders));
 
 /** Documents, Folders and Teams wired to the same storage and Authorizer, as in the app. */
 function setupWithFolders() {
@@ -22,15 +39,15 @@ function setupWithFolders() {
   const teams = new InMemoryTeamRepository();
   return {
     authorizer,
-    documents: new DocumentsService(authorizer, documents, folders, new Sharing(authorizer, users, teams)),
-    folders: new FoldersService(authorizer, folders, documents, new Sharing(authorizer, users, teams)),
+    documents: documentsService(authorizer, documents, folders, new Sharing(authorizer, users, teams)),
+    folders: foldersService(authorizer, folders, documents, new Sharing(authorizer, users, teams)),
     teams: new TeamsService(membership, teams, users),
   };
 }
 
 function setup() {
   const authorizer = new InMemoryAuthorizer(new InMemoryMembership());
-  return new DocumentsService(
+  return documentsService(
     authorizer,
     new InMemoryDocumentRepository(),
     new InMemoryFolderRepository(),
@@ -102,14 +119,14 @@ describe('DocumentsService', () => {
     const repository = new InMemoryDocumentRepository();
     const teams = new InMemoryTeamRepository();
     const users = new InMemoryUserDirectory();
-    const doc = await new DocumentsService(
+    const doc = await documentsService(
       authorizer,
       repository,
       new InMemoryFolderRepository(),
       new Sharing(authorizer, users, teams),
     ).create('alice', { title: 'Plan', content: 'v1' });
 
-    const restarted = new DocumentsService(
+    const restarted = documentsService(
       authorizer,
       repository,
       new InMemoryFolderRepository(),
@@ -122,7 +139,7 @@ describe('DocumentsService', () => {
 
   it('removes every grant on a document when it is deleted', async () => {
     const authorizer = new InMemoryAuthorizer(new InMemoryMembership());
-    const service = new DocumentsService(
+    const service = documentsService(
       authorizer,
       new InMemoryDocumentRepository(),
       new InMemoryFolderRepository(),
@@ -177,7 +194,7 @@ describe('DocumentsService', () => {
     }
     const repository = new RecordingRepository();
     const authorizer = new UnavailableAuthorizer(new InMemoryMembership());
-    const service = new DocumentsService(
+    const service = documentsService(
       authorizer,
       repository,
       new InMemoryFolderRepository(),
@@ -274,8 +291,8 @@ describe('DocumentsService', () => {
       const folderRepository = new InMemoryFolderRepository();
       const users = new InMemoryUserDirectory();
       const teams = new InMemoryTeamRepository();
-      const documents = new DocumentsService(authorizer, documentRepository, folderRepository, new Sharing(authorizer, users, teams));
-      const folders = new FoldersService(authorizer, folderRepository, documentRepository, new Sharing(authorizer, users, teams));
+      const documents = documentsService(authorizer, documentRepository, folderRepository, new Sharing(authorizer, users, teams));
+      const folders = foldersService(authorizer, folderRepository, documentRepository, new Sharing(authorizer, users, teams));
       const folder = await folders.create('alice', { name: 'Projects' });
       const doc = await documents.create('alice', { title: 'Plan', content: '' });
 

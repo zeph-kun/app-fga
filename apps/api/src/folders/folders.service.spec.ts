@@ -4,6 +4,7 @@ import { InMemoryAuthorizer } from '../authorization/in-memory-authorizer.js';
 import { InMemoryMembership } from '../authorization/in-memory-membership.js';
 import { InMemoryDocumentRepository } from '../documents/in-memory-document-repository.js';
 import { InMemoryTeamRepository } from '../teams/in-memory-team-repository.js';
+import { ResourceLifecycle } from '../lifecycle/resource-lifecycle.js';
 import { Sharing } from '../sharing/sharing.js';
 import { TeamsService } from '../teams/teams.service.js';
 import { InMemoryUserDirectory } from '../users/in-memory-user-directory.js';
@@ -21,7 +22,13 @@ function setup() {
     authorizer,
     documents,
     folders,
-    service: new FoldersService(authorizer, folders, documents, new Sharing(authorizer, users, teams)),
+    service: new FoldersService(
+      authorizer,
+      folders,
+      documents,
+      new Sharing(authorizer, users, teams),
+      new ResourceLifecycle(authorizer, documents, folders),
+    ),
     teams: new TeamsService(membership, teams, users),
   };
 }

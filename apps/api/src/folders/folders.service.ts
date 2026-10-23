@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { Authorizer, type Permission, type Role, folderRef, userSubject } from '../authorization/authorizer.js';
+import { Authorizer, type Permission, type Role, folderRef } from '../authorization/authorizer.js';
 import type { Document } from '../documents/document.js';
 import { DocumentRepository } from '../documents/document-repository.js';
+import { ResourceLifecycle } from '../lifecycle/resource-lifecycle.js';
 import { Sharing, type ShareEntry, type ShareInput } from '../sharing/sharing.js';
 import type { Folder } from './folder.js';
 import { FolderRepository } from './folder-repository.js';
@@ -34,18 +35,12 @@ export class FoldersService {
     private readonly folders: FolderRepository,
     private readonly documents: DocumentRepository,
     private readonly sharing: Sharing,
+    private readonly lifecycle: ResourceLifecycle,
   ) {}
 
   async create(userId: string, input: CreateFolderInput): Promise<Folder> {
     const folder: Folder = { id: randomUUID(), ownerId: userId, ...input };
-    await this.folders.save(folder);
-    try {
-      await this.authorizer.grant(userSubject(userId), 'owner', folderRef(folder.id));
-    } catch (error) {
-      // Without its Owner grant nobody could ever open the folder: do not keep it.
-      await this.folders.delete(folder.id);
-      throw error;
-    }
+    await this.lifecycle.createFolder(folder);
     return folder;
   }
 
@@ -77,8 +72,7 @@ export class FoldersService {
     if ((await this.documents.findByFolder(id)).length > 0) {
       throw new ConflictException('The folder still contains documents');
     }
-    await this.folders.delete(id);
-    await this.authorizer.revokeAll(folderRef(id));
+    await this.lifecycle.deleteFolder(id);
   }
 
   async share(userId: string, id: string, input: ShareInput): Promise<void> {
