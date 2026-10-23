@@ -111,6 +111,12 @@ export abstract class Authorizer {
     type: ResourceType,
   ): Promise<string[]>;
 
+  /**
+   * Ids of every resource of `type` that holds at least one grant or folder link, whoever
+   * it is for. For maintenance (see `Reconciler`); unlike `resourcesWhere` it is not about a user.
+   */
+  abstract resourcesWithGrants(type: ResourceType): Promise<string[]>;
+
   /** Puts the document in a folder, replacing its previous folder; `null` takes it out of any folder. */
   abstract setParent(documentId: string, folderId: string | null): Promise<void>;
 

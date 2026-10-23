@@ -152,6 +152,13 @@ class Model {
     return ends.length === 0 ? null : new Date(Math.max(...ends));
   }
 
+  /** Resources of `type` with at least one grant (expired or not) or, for a document, a folder link. */
+  withGrants(type: 'document' | 'folder'): string[] {
+    const ids = new Set([...this.grants.values()].filter((g) => g.resource.type === type).map((g) => g.resource.id));
+    if (type === 'document') for (const id of this.parents.keys()) ids.add(id);
+    return [...ids];
+  }
+
   teamsOf(user: string): string[] {
     return [...this.members].filter(([, users]) => users.has(user)).map(([team]) => team);
   }
@@ -299,6 +306,10 @@ export function authorizerPropertyContract(
                 .filter((g) => g.expiresAt === undefined || g.expiresAt.getTime() > Date.now())
                 .map((g) => `${g.subject.type}:${g.subject.id}:${g.role}`);
               expect(sorted(grants)).toEqual(sorted(model.grantsOn(resource)));
+            }
+            for (const type of ['document', 'folder'] as const) {
+              const found = (await authorizer.resourcesWithGrants(type)).filter((rid) => rid.startsWith(run));
+              expect(sorted(found), `${type} with grants`).toEqual(sorted(model.withGrants(type)));
             }
             for (const team of TEAMS.map(id)) {
               expect(sorted(await membership.members(team))).toEqual(sorted(model.teamMembers(team)));

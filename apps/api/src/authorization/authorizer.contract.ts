@@ -163,6 +163,26 @@ export function authorizerContract(
       expect(await authorizer.resourcesWhere('alice', 'can_edit', 'document')).not.toContain(shared);
     });
 
+    it('lists the resources of a type that hold any grant or folder link, whoever it is for', async () => {
+      const { authorizer } = await create();
+      const [granted, linked, revoked] = [documentRef(randomUUID()), documentRef(randomUUID()), documentRef(randomUUID())];
+      const aFolder = folderRef(randomUUID());
+      await authorizer.grant(userSubject('alice'), 'owner', granted);
+      await authorizer.setParent(linked.id, aFolder.id);
+      await authorizer.grant(userSubject('alice'), 'owner', revoked);
+      await authorizer.revokeAll(revoked);
+      await authorizer.grant(userSubject('alice'), 'owner', aFolder);
+
+      const documents = await authorizer.resourcesWithGrants('document');
+      const folders = await authorizer.resourcesWithGrants('folder');
+
+      expect(documents).toEqual(expect.arrayContaining([granted.id, linked.id]));
+      expect(documents).not.toContain(revoked.id);
+      expect(documents).not.toContain(aFolder.id);
+      expect(folders).toContain(aFolder.id);
+      expect(folders).not.toContain(granted.id);
+    });
+
     it('lists the direct grants on a resource', async () => {
       const { authorizer } = await create();
       const doc = documentRef(randomUUID());

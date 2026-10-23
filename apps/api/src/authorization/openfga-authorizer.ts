@@ -112,6 +112,10 @@ export class OpenFgaAuthorizer extends Authorizer {
     return objects.map((object) => object.slice(`${type}:`.length));
   }
 
+  override resourcesWithGrants(type: ResourceType): Promise<string[]> {
+    return this.store.objectIdsOfType(type);
+  }
+
   override async setParent(documentId: string, folderId: string | null): Promise<void> {
     const object = objectOf({ type: 'document', id: documentId });
     const wanted = folderId === null ? undefined : `folder:${folderId}`;

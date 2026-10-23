@@ -78,6 +78,15 @@ export class InMemoryAuthorizer extends Authorizer {
     return [...ids].filter((id) => this.holds(userId, teams, ROLE_OF[permission], { type, id }));
   }
 
+  override resourcesWithGrants(type: ResourceType): Promise<string[]> {
+    const ids = new Set<string>();
+    for (const { resource } of this.grants.values()) {
+      if (resource.type === type) ids.add(resource.id);
+    }
+    if (type === 'document') for (const id of this.parents.keys()) ids.add(id);
+    return Promise.resolve([...ids]);
+  }
+
   override setParent(documentId: string, folderId: string | null): Promise<void> {
     if (folderId === null) this.parents.delete(documentId);
     else this.parents.set(documentId, folderId);

@@ -56,11 +56,21 @@ export class OpenFgaStore implements OnModuleInit {
   }
 
   /** Every tuple stored on `object`, whatever its relation. */
-  async tuplesOn(object: string): Promise<Tuple[]> {
+  tuplesOn(object: string): Promise<Tuple[]> {
+    return this.readAll({ object });
+  }
+
+  /** The ids of every object of `type` that has at least one tuple. Reads the whole store: for maintenance only. */
+  async objectIdsOfType(type: string): Promise<string[]> {
+    const objects = (await this.readAll({})).map((t) => t.object).filter((o) => o.startsWith(`${type}:`));
+    return [...new Set(objects.map((o) => o.slice(type.length + 1)))];
+  }
+
+  private async readAll(filter: { object?: string }): Promise<Tuple[]> {
     const tuples: Tuple[] = [];
     let continuationToken: string | undefined;
     do {
-      const page = await this.client.read({ object }, { continuationToken });
+      const page = await this.client.read(filter, { continuationToken });
       tuples.push(...page.tuples.map(({ key }) => key));
       continuationToken = page.continuation_token || undefined;
     } while (continuationToken);
