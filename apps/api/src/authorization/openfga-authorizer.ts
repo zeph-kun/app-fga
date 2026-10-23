@@ -1,14 +1,6 @@
-import { readFile } from 'node:fs/promises';
-import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
-import {
-  ClientWriteRequestOnDuplicateWrites,
-  ClientWriteRequestOnMissingDeletes,
-  CredentialsMethod,
-  OpenFgaClient,
-} from '@openfga/sdk';
-import { transformer } from '@openfga/syntax-transformer';
+import { Injectable } from '@nestjs/common';
+import type { OpenFgaClient } from '@openfga/sdk';
 import { z } from 'zod';
-import { ENV, type Env } from '../config/env.js';
 import {
   Authorizer,
   type Grant,
@@ -20,15 +12,10 @@ import {
   teamSubject,
   userSubject,
 } from './authorizer.js';
+import { OpenFgaStore, type Tuple, ignoreDuplicateWrites, ignoreMissingDeletes } from './openfga-store.js';
 
 const EXPIRY_CONDITION = 'non_expired';
 const roleSchema = z.enum(['owner', 'editor', 'viewer']);
-const ignoreMissingDeletes = {
-  conflict: { onMissingDeletes: ClientWriteRequestOnMissingDeletes.Ignore },
-};
-const ignoreDuplicateWrites = {
-  conflict: { onDuplicateWrites: ClientWriteRequestOnDuplicateWrites.Ignore },
-};
 
 /** Strongest first: the first permission held tells the role. */
 const ACCESS_PROBES = [
@@ -37,43 +24,13 @@ const ACCESS_PROBES = [
   { permission: 'can_view', role: 'viewer' },
 ] as const satisfies readonly { permission: Permission; role: Role }[];
 
-interface Tuple {
-  readonly user: string;
-  readonly relation: string;
-  readonly object: string;
-  readonly condition?: { readonly name: string; readonly context?: object };
-}
-
 @Injectable()
-export class OpenFgaAuthorizer extends Authorizer implements OnModuleInit {
-  private readonly logger = new Logger(OpenFgaAuthorizer.name);
+export class OpenFgaAuthorizer extends Authorizer {
   private readonly client: OpenFgaClient;
 
-  constructor(@Inject(ENV) private readonly env: Env) {
+  constructor(private readonly store: OpenFgaStore) {
     super();
-    this.client = new OpenFgaClient({
-      apiUrl: env.OPENFGA_API_URL,
-      credentials: {
-        method: CredentialsMethod.ApiToken,
-        config: { token: env.OPENFGA_API_TOKEN },
-      },
-    });
-  }
-
-  /** Finds (or creates) the store and publishes the authorization model. */
-  async onModuleInit(): Promise<void> {
-    const { stores } = await this.client.listStores();
-    const existing = stores.find((s) => s.name === this.env.OPENFGA_STORE_NAME);
-    const storeId =
-      existing?.id ?? (await this.client.createStore({ name: this.env.OPENFGA_STORE_NAME })).id;
-    this.client.storeId = storeId;
-
-    const dsl = await readFile(this.env.OPENFGA_MODEL_PATH, 'utf8');
-    const model = await this.client.writeAuthorizationModel(
-      transformer.transformDSLToJSONObject(dsl),
-    );
-    this.client.authorizationModelId = model.authorization_model_id;
-    this.logger.log(`OpenFGA store ${storeId}, model ${model.authorization_model_id}`);
+    this.client = store.client;
   }
 
   override async can(userId: string, permission: Permission, resource: Resource): Promise<boolean> {
@@ -120,7 +77,7 @@ export class OpenFgaAuthorizer extends Authorizer implements OnModuleInit {
 
   override async grantsOn(resource: Resource): Promise<Grant[]> {
     const grants: Grant[] = [];
-    for (const tuple of await this.tuplesOn(objectOf(resource))) {
+    for (const tuple of await this.store.tuplesOn(objectOf(resource))) {
       const role = roleSchema.safeParse(tuple.relation);
       const subject = subjectOf(tuple.user);
       if (role.success && subject) {
@@ -132,7 +89,7 @@ export class OpenFgaAuthorizer extends Authorizer implements OnModuleInit {
   }
 
   override async revokeAll(resource: Resource): Promise<void> {
-    const tuples = await this.tuplesOn(objectOf(resource));
+    const tuples = await this.store.tuplesOn(objectOf(resource));
     if (tuples.length === 0) return;
     await this.client.write({ deletes: tuples }, ignoreMissingDeletes);
   }
@@ -154,7 +111,7 @@ export class OpenFgaAuthorizer extends Authorizer implements OnModuleInit {
   override async setParent(documentId: string, folderId: string | null): Promise<void> {
     const object = objectOf({ type: 'document', id: documentId });
     const wanted = folderId === null ? undefined : `folder:${folderId}`;
-    const current = (await this.tuplesOn(object)).filter((t) => t.relation === 'parent');
+    const current = (await this.store.tuplesOn(object)).filter((t) => t.relation === 'parent');
 
     const deletes = current.filter((t) => t.user !== wanted);
     const writes =
@@ -166,13 +123,13 @@ export class OpenFgaAuthorizer extends Authorizer implements OnModuleInit {
   }
 
   override async parentOf(documentId: string): Promise<string | null> {
-    const tuples = await this.tuplesOn(objectOf({ type: 'document', id: documentId }));
+    const tuples = await this.store.tuplesOn(objectOf({ type: 'document', id: documentId }));
     const parent = tuples.find((t) => t.relation === 'parent');
     return parent ? parent.user.slice('folder:'.length) : null;
   }
 
   override async teamMembers(teamId: string): Promise<string[]> {
-    const tuples = await this.tuplesOn(`team:${teamId}`);
+    const tuples = await this.store.tuplesOn(`team:${teamId}`);
     return tuples
       .filter((t) => t.relation === 'member' && t.user.startsWith('user:'))
       .map((t) => t.user.slice('user:'.length));
@@ -203,18 +160,6 @@ export class OpenFgaAuthorizer extends Authorizer implements OnModuleInit {
       context: nowContext(),
     });
     return users.flatMap((user) => (user.object?.id ? [user.object.id] : []));
-  }
-
-  /** Every tuple stored on `object`, whatever its relation. */
-  private async tuplesOn(object: string): Promise<Tuple[]> {
-    const tuples: Tuple[] = [];
-    let continuationToken: string | undefined;
-    do {
-      const page = await this.client.read({ object }, { continuationToken });
-      tuples.push(...page.tuples.map(({ key }) => key));
-      continuationToken = page.continuation_token || undefined;
-    } while (continuationToken);
-    return tuples;
   }
 }
 
