@@ -119,6 +119,19 @@ export function authorizerContract(
       await expect(authorizer.revoke(userSubject('bob'), 'editor', doc)).resolves.toBeUndefined();
     });
 
+    it('replaces a grant given again, including its expiry', async () => {
+      const authorizer = await create();
+      const doc = documentRef(randomUUID());
+      await authorizer.grant(userSubject('bob'), 'viewer', doc, inThePast);
+
+      await authorizer.grant(userSubject('bob'), 'viewer', doc, inAnHour);
+      expect(await authorizer.can('bob', 'can_view', doc)).toBe(true);
+      expect((await authorizer.grantsOn(doc)).map((g) => g.expiresAt?.getTime())).toEqual([inAnHour.getTime()]);
+
+      await authorizer.grant(userSubject('bob'), 'viewer', doc);
+      expect((await authorizer.grantsOn(doc)).map((g) => g.expiresAt)).toEqual([undefined]);
+    });
+
     it('lists the resources of a type a user holds a permission on', async () => {
       const authorizer = await create();
       const mine = randomUUID();
@@ -275,6 +288,15 @@ export function authorizerContract(
         await authorizer.addTeamMember(teamId, 'bob');
 
         expect(await authorizer.teamMembers(teamId)).toEqual(expect.arrayContaining(['alice', 'bob']));
+      });
+
+      it('adds a team member, and adding one twice is a no-op', async () => {
+        const authorizer = await create();
+        const teamId = randomUUID();
+        await authorizer.addTeamMember(teamId, 'alice');
+
+        await expect(authorizer.addTeamMember(teamId, 'alice')).resolves.toBeUndefined();
+        expect(await authorizer.teamMembers(teamId)).toEqual(['alice']);
       });
 
       it('removes a team member, and removing one twice is a no-op', async () => {

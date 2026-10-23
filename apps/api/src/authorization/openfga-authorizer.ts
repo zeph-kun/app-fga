@@ -1,6 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
-import { ClientWriteRequestOnMissingDeletes, CredentialsMethod, OpenFgaClient } from '@openfga/sdk';
+import {
+  ClientWriteRequestOnDuplicateWrites,
+  ClientWriteRequestOnMissingDeletes,
+  CredentialsMethod,
+  OpenFgaClient,
+} from '@openfga/sdk';
 import { transformer } from '@openfga/syntax-transformer';
 import { z } from 'zod';
 import { ENV, type Env } from '../config/env.js';
@@ -20,6 +25,9 @@ const EXPIRY_CONDITION = 'non_expired';
 const roleSchema = z.enum(['owner', 'editor', 'viewer']);
 const ignoreMissingDeletes = {
   conflict: { onMissingDeletes: ClientWriteRequestOnMissingDeletes.Ignore },
+};
+const ignoreDuplicateWrites = {
+  conflict: { onDuplicateWrites: ClientWriteRequestOnDuplicateWrites.Ignore },
 };
 
 /** Strongest first: the first permission held tells the role. */
@@ -100,7 +108,9 @@ export class OpenFgaAuthorizer extends Authorizer implements OnModuleInit {
     const withCondition = expiresAt
       ? { ...key, condition: { name: EXPIRY_CONDITION, context: { expires_at: expiresAt.toISOString() } } }
       : key;
-    await this.client.write({ writes: [withCondition] });
+    // A tuple cannot be written over itself, so a grant given again (new expiry, say) starts by removing the old one.
+    await this.client.write({ deletes: [key] }, ignoreMissingDeletes);
+    await this.client.write({ writes: [withCondition] }, ignoreDuplicateWrites);
   }
 
   override async revoke(subject: Subject, role: Role, resource: Resource): Promise<void> {
@@ -169,7 +179,7 @@ export class OpenFgaAuthorizer extends Authorizer implements OnModuleInit {
   }
 
   override async addTeamMember(teamId: string, userId: string): Promise<void> {
-    await this.client.write({ writes: [memberTuple(teamId, userId)] });
+    await this.client.write({ writes: [memberTuple(teamId, userId)] }, ignoreDuplicateWrites);
   }
 
   override async removeTeamMember(teamId: string, userId: string): Promise<void> {
