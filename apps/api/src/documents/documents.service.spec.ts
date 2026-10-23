@@ -15,19 +15,23 @@ import type { DocumentRepository } from './document-repository.js';
 import { DocumentsService } from './documents.service.js';
 import { InMemoryDocumentRepository } from './in-memory-document-repository.js';
 
+// These two never create or delete a Team, so their lifecycle gets Team storage of its own.
+const lifecycleFor = (authorizer: Authorizer, documents: DocumentRepository, folders: FolderRepository) =>
+  new ResourceLifecycle(authorizer, documents, folders, new InMemoryTeamRepository(), new InMemoryMembership());
+
 const documentsService = (
   authorizer: Authorizer,
   documents: DocumentRepository,
   folders: FolderRepository,
   sharing: Sharing,
-) => new DocumentsService(authorizer, documents, folders, sharing, new ResourceLifecycle(authorizer, documents, folders));
+) => new DocumentsService(authorizer, documents, folders, sharing, lifecycleFor(authorizer, documents, folders));
 
 const foldersService = (
   authorizer: Authorizer,
   folders: FolderRepository,
   documents: DocumentRepository,
   sharing: Sharing,
-) => new FoldersService(authorizer, folders, documents, sharing, new ResourceLifecycle(authorizer, documents, folders));
+) => new FoldersService(authorizer, folders, documents, sharing, lifecycleFor(authorizer, documents, folders));
 
 /** Documents, Folders and Teams wired to the same storage and Authorizer, as in the app. */
 function setupWithFolders() {
@@ -41,7 +45,12 @@ function setupWithFolders() {
     authorizer,
     documents: documentsService(authorizer, documents, folders, new Sharing(authorizer, users, teams)),
     folders: foldersService(authorizer, folders, documents, new Sharing(authorizer, users, teams)),
-    teams: new TeamsService(membership, teams, users),
+    teams: new TeamsService(
+      membership,
+      teams,
+      users,
+      new ResourceLifecycle(authorizer, documents, folders, teams, membership),
+    ),
   };
 }
 

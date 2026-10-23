@@ -5,13 +5,16 @@ import type { Document } from '../documents/document.js';
 import { InMemoryDocumentRepository } from '../documents/in-memory-document-repository.js';
 import type { Folder } from '../folders/folder.js';
 import { InMemoryFolderRepository } from '../folders/in-memory-folder-repository.js';
+import { InMemoryTeamRepository } from '../teams/in-memory-team-repository.js';
+import type { Team } from '../teams/team.js';
 import { ResourceLifecycle } from './resource-lifecycle.js';
 
 const document: Document = { id: 'doc-1', title: 'Plan', content: 'v1', ownerId: 'alice', folderId: null };
 const folder: Folder = { id: 'folder-1', name: 'Projects', ownerId: 'alice' };
+const team: Team = { id: 'team-1', name: 'Design', ownerId: 'alice' };
 
 /** An InMemoryAuthorizer whose named operations fail, as OpenFGA does when it is down. */
-function setup(failing: ('grant' | 'setParent' | 'revokeAll')[] = []) {
+function setup(failing: ('grant' | 'setParent' | 'revokeAll' | 'addMember' | 'removeMember')[] = []) {
   class Flaky extends InMemoryAuthorizer {
     override grant(...args: Parameters<InMemoryAuthorizer['grant']>): Promise<void> {
       return failing.includes('grant') ? Promise.reject(new Error('OpenFGA unavailable')) : super.grant(...args);
@@ -27,10 +30,29 @@ function setup(failing: ('grant' | 'setParent' | 'revokeAll')[] = []) {
         : super.revokeAll(...args);
     }
   }
-  const authorizer = new Flaky(new InMemoryMembership());
+  class FlakyMembership extends InMemoryMembership {
+    override add(...args: Parameters<InMemoryMembership['add']>): Promise<void> {
+      return failing.includes('addMember') ? Promise.reject(new Error('OpenFGA unavailable')) : super.add(...args);
+    }
+    override remove(...args: Parameters<InMemoryMembership['remove']>): Promise<void> {
+      return failing.includes('removeMember')
+        ? Promise.reject(new Error('OpenFGA unavailable'))
+        : super.remove(...args);
+    }
+  }
+  const membership = new FlakyMembership();
+  const authorizer = new Flaky(membership);
   const documents = new InMemoryDocumentRepository();
   const folders = new InMemoryFolderRepository();
-  return { authorizer, documents, folders, lifecycle: new ResourceLifecycle(authorizer, documents, folders) };
+  const teams = new InMemoryTeamRepository();
+  return {
+    authorizer,
+    membership,
+    documents,
+    folders,
+    teams,
+    lifecycle: new ResourceLifecycle(authorizer, documents, folders, teams, membership),
+  };
 }
 
 describe('ResourceLifecycle', () => {
@@ -165,6 +187,47 @@ describe('ResourceLifecycle', () => {
       await expect(lifecycle.deleteFolder(folder.id)).resolves.toBeUndefined();
 
       expect(await folders.findById(folder.id)).toBeUndefined();
+    });
+  });
+
+  describe('createTeam', () => {
+    it('stores the Team and makes its creator its first member', async () => {
+      const { membership, teams, lifecycle } = setup();
+
+      await lifecycle.createTeam(team);
+
+      expect(await teams.findById(team.id)).toEqual(team);
+      expect(await membership.members(team.id)).toEqual(['alice']);
+    });
+
+    it('keeps nothing when the creator cannot be added', async () => {
+      const { teams, lifecycle } = setup(['addMember']);
+
+      await expect(lifecycle.createTeam(team)).rejects.toThrow('OpenFGA unavailable');
+
+      expect(await teams.findById(team.id)).toBeUndefined();
+    });
+  });
+
+  describe('deleteTeam', () => {
+    it('removes every member and then the Team', async () => {
+      const { membership, teams, lifecycle } = setup();
+      await lifecycle.createTeam(team);
+      await membership.add(team.id, 'bob');
+
+      await lifecycle.deleteTeam(team.id);
+
+      expect(await membership.members(team.id)).toEqual([]);
+      expect(await teams.findById(team.id)).toBeUndefined();
+    });
+
+    it('keeps the Team, so the delete can be retried, when a member cannot be removed', async () => {
+      const { teams, lifecycle } = setup(['removeMember']);
+      await lifecycle.createTeam(team);
+
+      await expect(lifecycle.deleteTeam(team.id)).rejects.toThrow('OpenFGA unavailable');
+
+      expect(await teams.findById(team.id)).toEqual(team);
     });
   });
 });

@@ -27,9 +27,14 @@ function setup() {
       folders,
       documents,
       new Sharing(authorizer, users, teams),
-      new ResourceLifecycle(authorizer, documents, folders),
+      new ResourceLifecycle(authorizer, documents, folders, teams, membership),
     ),
-    teams: new TeamsService(membership, teams, users),
+    teams: new TeamsService(
+      membership,
+      teams,
+      users,
+      new ResourceLifecycle(authorizer, documents, folders, teams, membership),
+    ),
   };
 }
 

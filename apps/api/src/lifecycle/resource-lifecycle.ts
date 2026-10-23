@@ -1,13 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Authorizer, documentRef, folderRef, userSubject } from '../authorization/authorizer.js';
+import { Membership } from '../authorization/membership.js';
 import type { Document } from '../documents/document.js';
 import { DocumentRepository } from '../documents/document-repository.js';
 import type { Folder } from '../folders/folder.js';
 import { FolderRepository } from '../folders/folder-repository.js';
+import type { Team } from '../teams/team.js';
+import { TeamRepository } from '../teams/team-repository.js';
 
 /**
- * Creating, moving and deleting Documents and Folders, which spans Postgres (the
- * row) and OpenFGA (the grants) with no transaction between them. It owns the
+ * Creating, moving and deleting Documents, Folders and Teams, which spans Postgres (the
+ * row) and OpenFGA (the grants or the members) with no transaction between them. It owns the
  * order of the writes and what to undo when one fails, so the services only
  * apply business rules. The caller has already checked who may do what.
  *
@@ -21,6 +24,8 @@ export class ResourceLifecycle {
     private readonly authorizer: Authorizer,
     private readonly documents: DocumentRepository,
     private readonly folders: FolderRepository,
+    private readonly teams: TeamRepository,
+    private readonly membership: Membership,
   ) {}
 
   /** Stores the Document, makes its `ownerId` the Owner and puts it in its Folder, or keeps nothing. */
@@ -77,6 +82,30 @@ export class ResourceLifecycle {
   async deleteFolder(id: string): Promise<void> {
     await this.folders.delete(id);
     await this.authorizer.revokeAll(folderRef(id)).catch((error: unknown) => this.leftBehind('folder', id, error));
+  }
+
+  /** Stores the Team and makes its `ownerId` its first member, or keeps nothing. */
+  async createTeam(team: Team): Promise<void> {
+    await this.teams.save(team);
+    try {
+      await this.membership.add(team.id, team.ownerId);
+    } catch (error) {
+      await this.teams.delete(team.id);
+      throw error;
+    }
+  }
+
+  /**
+   * Removes every member, then the row. The other way round from a Document: a Team's grants stay
+   * on the resources shared with it, so members must lose their membership first or a failure here
+   * would leave people with access through a Team that no longer exists. A failure keeps the row,
+   * so the delete can simply be retried.
+   */
+  async deleteTeam(id: string): Promise<void> {
+    for (const member of await this.membership.members(id)) {
+      await this.membership.remove(id, member);
+    }
+    await this.teams.delete(id);
   }
 
   private leftBehind(type: string, id: string, error: unknown): void {

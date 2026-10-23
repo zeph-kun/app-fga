@@ -1,6 +1,9 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { InMemoryAuthorizer } from '../authorization/in-memory-authorizer.js';
 import { InMemoryMembership } from '../authorization/in-memory-membership.js';
+import { InMemoryDocumentRepository } from '../documents/in-memory-document-repository.js';
+import { InMemoryFolderRepository } from '../folders/in-memory-folder-repository.js';
+import { ResourceLifecycle } from '../lifecycle/resource-lifecycle.js';
 import { InMemoryUserDirectory } from '../users/in-memory-user-directory.js';
 import { InMemoryTeamRepository } from './in-memory-team-repository.js';
 import { TeamsService } from './teams.service.js';
@@ -9,7 +12,14 @@ function setup() {
   const membership = new InMemoryMembership();
   const teams = new InMemoryTeamRepository();
   const users = new InMemoryUserDirectory(['alice', 'bob', 'carol']);
-  return { membership, teams, service: new TeamsService(membership, teams, users) };
+  const lifecycle = new ResourceLifecycle(
+    new InMemoryAuthorizer(membership),
+    new InMemoryDocumentRepository(),
+    new InMemoryFolderRepository(),
+    teams,
+    membership,
+  );
+  return { membership, teams, service: new TeamsService(membership, teams, users, lifecycle) };
 }
 
 describe('TeamsService', () => {

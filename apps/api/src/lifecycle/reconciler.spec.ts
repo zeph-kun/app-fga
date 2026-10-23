@@ -5,22 +5,29 @@ import type { Document } from '../documents/document.js';
 import { InMemoryDocumentRepository } from '../documents/in-memory-document-repository.js';
 import type { Folder } from '../folders/folder.js';
 import { InMemoryFolderRepository } from '../folders/in-memory-folder-repository.js';
+import { InMemoryTeamRepository } from '../teams/in-memory-team-repository.js';
+import type { Team } from '../teams/team.js';
 import { Reconciler } from './reconciler.js';
 import { ResourceLifecycle } from './resource-lifecycle.js';
 
 const document: Document = { id: 'doc-1', title: 'Plan', content: '', ownerId: 'alice', folderId: null };
 const folder: Folder = { id: 'folder-1', name: 'Projects', ownerId: 'alice' };
+const team: Team = { id: 'team-1', name: 'Design', ownerId: 'alice' };
 
 function setup() {
-  const authorizer = new InMemoryAuthorizer(new InMemoryMembership());
+  const membership = new InMemoryMembership();
+  const authorizer = new InMemoryAuthorizer(membership);
   const documents = new InMemoryDocumentRepository();
   const folders = new InMemoryFolderRepository();
+  const teams = new InMemoryTeamRepository();
   return {
     authorizer,
+    membership,
     documents,
     folders,
-    lifecycle: new ResourceLifecycle(authorizer, documents, folders),
-    reconciler: new Reconciler(authorizer, documents, folders),
+    teams,
+    lifecycle: new ResourceLifecycle(authorizer, documents, folders, teams, membership),
+    reconciler: new Reconciler(authorizer, documents, folders, teams, membership),
   };
 }
 
@@ -29,6 +36,7 @@ describe('Reconciler', () => {
     const { lifecycle, reconciler } = setup();
     await lifecycle.createFolder(folder);
     await lifecycle.createDocument({ ...document, folderId: folder.id });
+    await lifecycle.createTeam(team);
 
     expect(await reconciler.reconcile({ apply: true })).toEqual([]);
   });
@@ -114,6 +122,39 @@ describe('Reconciler', () => {
       expect(await authorizer.can('bob', 'can_view', documentRef(document.id))).toBe(true);
       expect(await documents.findById(document.id)).toBeDefined();
       expect(await folders.findById(folder.id)).toBeDefined();
+      expect(await reconciler.reconcile({ apply: false })).toEqual([]);
+    });
+  });
+
+  describe('a Team whose owner was never added as a member', () => {
+    it('reports it, and adds the owner back when applying', async () => {
+      const { membership, teams, reconciler } = setup();
+      await teams.save(team);
+
+      expect(await reconciler.reconcile({ apply: false })).toEqual([
+        { kind: 'owner-not-member', id: team.id, ownerId: 'alice' },
+      ]);
+      expect(await membership.members(team.id)).toEqual([]);
+      await reconciler.reconcile({ apply: true });
+
+      expect(await membership.members(team.id)).toEqual(['alice']);
+      expect(await reconciler.reconcile({ apply: false })).toEqual([]);
+    });
+  });
+
+  describe('members left behind by a Team that no longer exists', () => {
+    it('removes them when applying and keeps the members of existing Teams', async () => {
+      const { membership, lifecycle, reconciler } = setup();
+      await lifecycle.createTeam(team);
+      await membership.add(team.id, 'bob');
+      await membership.add('gone-team', 'bob');
+      await membership.add('gone-team', 'carol');
+
+      expect(await reconciler.reconcile({ apply: false })).toEqual([{ kind: 'orphan-members', id: 'gone-team' }]);
+      await reconciler.reconcile({ apply: true });
+
+      expect(await membership.members('gone-team')).toEqual([]);
+      expect((await membership.members(team.id)).sort()).toEqual(['alice', 'bob']);
       expect(await reconciler.reconcile({ apply: false })).toEqual([]);
     });
   });

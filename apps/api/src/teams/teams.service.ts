@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Membership } from '../authorization/membership.js';
+import { ResourceLifecycle } from '../lifecycle/resource-lifecycle.js';
 import { UserDirectory } from '../users/user-directory.js';
 import type { Team } from './team.js';
 import { TeamRepository } from './team-repository.js';
@@ -25,12 +26,12 @@ export class TeamsService {
     private readonly membership: Membership,
     private readonly teams: TeamRepository,
     private readonly users: UserDirectory,
+    private readonly lifecycle: ResourceLifecycle,
   ) {}
 
   async create(userId: string, { name }: CreateTeamInput): Promise<Team> {
     const team: Team = { id: randomUUID(), ownerId: userId, name };
-    await this.teams.save(team);
-    await this.membership.add(team.id, userId);
+    await this.lifecycle.createTeam(team);
     return team;
   }
 
@@ -58,10 +59,7 @@ export class TeamsService {
 
   async remove(userId: string, id: string): Promise<void> {
     await this.requireOwner(userId, id);
-    for (const member of await this.membership.members(id)) {
-      await this.membership.remove(id, member);
-    }
-    await this.teams.delete(id);
+    await this.lifecycle.deleteTeam(id);
   }
 
   async addMember(userId: string, id: string, target: string): Promise<void> {

@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { Authorizer, type Resource, documentRef, folderRef, userSubject } from '../authorization/authorizer.js';
+import { Membership } from '../authorization/membership.js';
 import { DocumentRepository } from '../documents/document-repository.js';
 import { FolderRepository } from '../folders/folder-repository.js';
+import { TeamRepository } from '../teams/team-repository.js';
 
 /** Something Postgres and OpenFGA disagree about. Postgres is right: the rows are the source of truth. */
 export type Finding =
@@ -10,7 +12,11 @@ export type Finding =
   /** The Folder link in OpenFGA is not the one the Document row names. */
   | { kind: 'wrong-folder'; id: string; expected: string | null; actual: string | null }
   /** Grants (or a Folder link) on an id that has no row any more. */
-  | { kind: 'orphan-grants'; type: 'document' | 'folder'; id: string };
+  | { kind: 'orphan-grants'; type: 'document' | 'folder'; id: string }
+  /** The Team exists but its owner is not a member, which creating a Team always makes them. */
+  | { kind: 'owner-not-member'; id: string; ownerId: string }
+  /** Members of a Team id that has no row: they would keep what was shared with that Team. */
+  | { kind: 'orphan-members'; id: string };
 
 /**
  * Finds, and optionally repairs, what a crash between the two writes of `ResourceLifecycle`
@@ -23,12 +29,18 @@ export class Reconciler {
     private readonly authorizer: Authorizer,
     private readonly documents: DocumentRepository,
     private readonly folders: FolderRepository,
+    private readonly teams: TeamRepository,
+    private readonly membership: Membership,
   ) {}
 
   /** The findings, in a stable order. With `apply`, each one is repaired too; repairs are safe to repeat. */
   async reconcile({ apply }: { apply: boolean }): Promise<Finding[]> {
     const findings: Finding[] = [];
-    const [documents, folders] = await Promise.all([this.documents.findAll(), this.folders.findAll()]);
+    const [documents, folders, teams] = await Promise.all([
+      this.documents.findAll(),
+      this.folders.findAll(),
+      this.teams.findAll(),
+    ]);
 
     for (const { id, ownerId } of folders) {
       if (!(await this.ownerHolds(folderRef(id), ownerId))) {
@@ -57,6 +69,19 @@ export class Reconciler {
         findings.push({ kind: 'orphan-grants', type, id });
         if (apply) await this.authorizer.revokeAll({ type, id } satisfies Resource);
       }
+    }
+
+    for (const { id, ownerId } of teams) {
+      if (!(await this.membership.members(id)).includes(ownerId)) {
+        findings.push({ kind: 'owner-not-member', id, ownerId });
+        if (apply) await this.membership.add(id, ownerId);
+      }
+    }
+    const knownTeams = new Set(teams.map((t) => t.id));
+    for (const id of await this.membership.teamsWithMembers()) {
+      if (knownTeams.has(id)) continue;
+      findings.push({ kind: 'orphan-members', id });
+      if (apply) for (const member of await this.membership.members(id)) await this.membership.remove(id, member);
     }
     return findings;
   }
