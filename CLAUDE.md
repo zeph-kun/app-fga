@@ -23,6 +23,7 @@ npm run dev:web       # http://localhost:3000
 npm test              # API unit tests (no Docker needed), property tests on the in-memory adapters included
 npm --prefix apps/api run test:integration   # adapter contract and property tests against Docker Postgres and OpenFGA
 npm run typecheck     # tsc --noEmit on both apps
+npm run reconcile     # list Postgres/OpenFGA differences (stop the API first); `npm run reconcile -- --apply` repairs them
 ```
 
 Dev logins (Keycloak realm `app-fga`): `alice`/`alice`, `bob`/`bob`, `florian`/`florian`, `adham`/`adham`, `jeremy`/`jeremy`, `yassine`/`yassine`. Admin console: `admin`/`admin`.
@@ -42,6 +43,7 @@ Keycloak's User Profile requires `lastName`: a user created without one can't lo
 
 - **All authorization goes through the `Authorizer` module** (`apps/api/src/authorization`). Controllers and services never talk to the OpenFGA SDK, and ask about `can_*` permissions on a `Resource` (`documentRef`/`folderRef`), never about roles. Two adapters exist: `OpenFgaAuthorizer` (prod) and `InMemoryAuthorizer` (tests), both held to `authorizer.contract.ts` and to `authorizer.properties.ts` (random sequences of grants, revokes, moves and membership changes, compared to a plain model of `model.fga`).
 - **Who belongs to a Team goes through `Membership`** (same folder), not the `Authorizer`: `OpenFgaMembership` and `InMemoryMembership`, held to `membership.contract.ts`. The `Authorizer` takes a `Membership` to resolve Teams, so an in-memory test wires one `InMemoryMembership` into both the `InMemoryAuthorizer` and `TeamsService`. `OpenFgaAuthorizer` and `OpenFgaMembership` share one `OpenFgaStore` (client, store and model bootstrap).
+- **Creating, moving and deleting Documents and Folders goes through `ResourceLifecycle`** (`apps/api/src/lifecycle`), which owns the Postgres + OpenFGA write order and the undo on failure; services only apply business rules and read through the repositories. `Reconciler` (`npm run reconcile`) repairs what a crash between the two writes leaves behind, with Postgres as the source of truth.
 - **Giving, listing and revoking Grants goes through `Sharing`** (`apps/api/src/sharing`). It does not authorize: the Documents and Folders services check `can_share` first, then pass the resource and its Owner.
 - **Documents and Folders are stored through `DocumentRepository` / `FolderRepository`** (`apps/api/src/documents`, `apps/api/src/folders`); only the `Prisma*Repository` adapters touch Prisma. Run the shared contract (`*-repository.contract.ts`) against any new adapter. The generated client (`src/generated`) is git-ignored and rebuilt by `postinstall`.
 - The OpenFGA model lives in `infra/openfga/model.fga`; the API creates the store and writes the model at startup. Keep `InMemoryAuthorizer` and the oracle in `authorizer.properties.ts` in sync with it.
@@ -59,7 +61,7 @@ Keycloak's User Profile requires `lastName`: a user created without one can't lo
 
 ## Known gaps
 
-- Postgres and OpenFGA writes are not atomic (see `docs/adr/0002-documents-in-postgres-via-prisma.md`): create cleans up after itself, delete is best-effort in the other direction, nothing reconciles after a crash.
+- Postgres and OpenFGA writes are not atomic (see `docs/adr/0002-documents-in-postgres-via-prisma.md`): `ResourceLifecycle` cleans up after a failed create, a failed delete of the grants is logged and left to `npm run reconcile`, which is manual (not scheduled) and unsafe while the API is creating things. Teams are not covered by either yet.
 - Folders do not nest, and the lists of documents and folders come from OpenFGA `ListObjects` without pagination (capped at 1000 by default).
 - Sign-out relies on the `id_token` kept in the Auth.js cookie (`logout` in `apps/web/src/app/actions.ts`); sessions opened before that change fall back to a Keycloak confirmation page.
 - `docker-compose.yml`'s credentials (`POSTGRES_PASSWORD`, `KEYCLOAK_ADMIN_PASSWORD`, `OPENFGA_PRESHARED_KEY`) default to values committed in this repo; override them via a root `.env` (see `.env.example`) before running this stack anywhere but your own machine.

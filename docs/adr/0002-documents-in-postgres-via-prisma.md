@@ -6,5 +6,5 @@ Documents (title, content, owner) live in a `documents` table in the `app` datab
 
 **Consequences:**
 - Who can access a Document stays in OpenFGA only; the table has no sharing columns.
-- Writes to Postgres and OpenFGA are not atomic. Create deletes the row if the Owner grant fails. Delete removes the row first, then every grant (`Authorizer.revokeAll`): if that second step fails, the leftover grants point at an id that no longer exists and are harmless (the Document is a 404), but nothing cleans them up yet.
+- Writes to Postgres and OpenFGA are not atomic. Create deletes the row if the Owner grant fails. Delete removes the row first, then every grant (`Authorizer.revokeAll`): if that second step fails, the leftover grants point at an id that no longer exists and are harmless (the Document is a 404). `ResourceLifecycle` owns these write orders, and `npm run reconcile` (the `Reconciler`) finds and repairs what a crash leaves behind: a row without its Owner grant, a Folder link that differs from the row, grants on an id with no row. Postgres is the source of truth; it is run by hand, with the API stopped, because a Document saved but not yet granted looks the same as one whose grant was lost.
 - Adapter specs (`*.integration.spec.ts`) need the Docker Postgres and run with `npm run test:integration`; `npm test` stays Docker-free.

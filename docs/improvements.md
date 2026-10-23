@@ -14,12 +14,12 @@ L'interface est plus large que nécessaire, et chaque nouvel adapter doit tout i
 **b. ✅ Couvert par les tests — `expiryOn` calcule dans la couche abstraite ce que le modèle FGA sait déjà.** Le contrat a maintenant les cas croisés (Team expirée plus Folder permanent, deux Teams, Team sur le Folder, grant expiré à côté d'un grant limité), et `authorizer.properties.ts` compare `expiryOn` à un oracle sur les deux adapters. La règle reste calculée côté API: la déplacer dans FGA n'est pas fait, ni l'ADR 2 ci-dessous.
 La règle "latest expiry parmi Share, Team et Folder" est réimplémentée à la main côté API, donc dupliquée par rapport à `model.fga` (risque de divergence). Le contrat devrait la couvrir avec des cas croisés: Team expirée plus Folder permanent, ou deux Teams.
 
-**c. Orchestration Postgres + OpenFGA répétée dans les services.**
+**c. ✅ Fait (Documents et Folders) — Orchestration Postgres + OpenFGA répétée dans les services.** `ResourceLifecycle` (`createDocument`, `deleteDocument`, `moveDocument`, `createFolder`, `deleteFolder`) cache l'ordre des écritures et la compensation. Une suppression dont la révocation des grants échoue réussit maintenant et journalise un avertissement. Les Teams (`TeamsService.create`/`remove`) ne sont pas encore couverts.
 `create` fait save, grant, setParent, puis un rollback manuel. `delete`, `move` et les folders ont la même forme. Les "Known gaps" (non-atomicité) le confirment. Piste: un module profond du type `ResourceLifecycle` (`create`/`delete`/`move`) qui cache la compensation et le rollback. Les services n'exposeraient plus que des règles métier.
 
 **d. ✅ Fait — `sharing.ts` est un fourre-tout** (erreurs HTTP, DTO, helper de date, type guard). Les services `documents` et `folders` y piochent chacun leur morceau. Un module `Sharing` unique, avec `share(resource, input)`, `shares(resource)` et `revoke(...)`, supprimerait la duplication. C'est le meilleur gain de leverage de la liste. Le module `Sharing` expose `share`, `shares`, `unshare` et `accessList`; il n'autorise rien, les services vérifient `can_share` avant de l'appeler.
 
-**e. Réconciliation Postgres/OpenFGA** (gap connu).
+**e. ✅ Fait — Réconciliation Postgres/OpenFGA** (gap connu). `npm --prefix apps/api run reconcile` liste les écarts (dry-run, code de sortie 1 s'il y en a) et `-- --apply` les répare, Postgres faisant foi: grant `owner` manquant, lien de Folder différent de la ligne, grants sur un id sans ligne. À lancer API arrêtée. Les membres de Teams orphelins ne sont pas traités.
 Un job ou une commande `reconcile` qui détecte les documents sans grant `owner` et les tuples orphelins. Testable via les deux adapters existants.
 
 ## 2. Nouvelles features
