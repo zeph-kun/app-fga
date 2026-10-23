@@ -10,16 +10,22 @@
 
 **Viewer**: a User who can only read a Document.
 
-**Share**: giving another User Editor or Viewer access to a Document. Sharing again with a different role replaces the previous one.
+**Grant**: the Editor or Viewer role given to a User or a Team on a Document or Folder, optionally with an Expiry. A User or Team has at most one Grant per Document or Folder. Access that is inherited from a Folder or comes through a Team is not a Grant of that User.
+_Avoid_: Permission, access right
 
-**Expiry**: the moment a time-limited Share stops applying; a Share without one lasts until it is revoked. The Owner sets it when sharing and sees it in the Shares list.
+**Share**: the action of creating a Grant for another User or a Team. Sharing again with a different role replaces the previous Grant.
 
-**Access expiry**: the moment a User's own access to a Document ends, shown to them as the time left. It is the latest Expiry among all the ways they have access (own Share, Team, Folder), and there is none if any of those never expires, or if they are the Owner.
+**Team**: a named group of Users, created by a User who becomes its Team owner. Granting a role to a Team gives it to every member, so adding or removing a member changes their access without touching the Grants. Only the Team owner manages its name and members, and cannot be removed from it.
+_Avoid_: Group
 
-**Shares list**: the Users a Document is currently shared with and their role. Only the Owner can see it; it never includes the Owner.
+**Expiry**: the moment a time-limited Grant stops applying; a Grant without one lasts until it is revoked. The Owner sets it when sharing and sees it in the Shares list.
+
+**Access expiry**: the moment a User's own access to a Document ends, shown to them as the time left. It is the latest Expiry among all the ways they have access (own Grant, Team, Folder), and there is none if any of those never expires, or if they are the Owner.
+
+**Shares list**: the Grants currently on a Document, with their role and Expiry. Only the Owner can see it; it never includes the Owner.
 
 **Folder**: a named container for Documents, created by a User who becomes its Owner. A Document is in at most one Folder; Folders do not nest. Owner, Editor and Viewer mean the same on a Folder, and a role held on a Folder also applies to every Document in it. Only an empty Folder can be deleted.
 
 **Move**: putting a Document in a Folder, or taking it out. The Document then gets the roles of its new Folder and loses those of the old one. Only its Owner can do it, and only into a Folder they can edit.
 
-**Revoke**: removing a User's Share on a Document. The Owner cannot be revoked.
+**Revoke**: removing a User's or Team's Grant on a Document or Folder. The Owner cannot be revoked.
