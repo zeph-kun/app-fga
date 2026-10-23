@@ -4,7 +4,7 @@ Analyse faite avec les skills `codebase-design` et `domain-modeling` (mattpocock
 
 ## 1. Améliorations d'architecture (`codebase-design`)
 
-**a. `Authorizer` est large (≈15 méthodes abstraites) et mélange trois rôles.**
+**a. ✅ Fait — `Authorizer` est large (≈15 méthodes abstraites) et mélange trois rôles.** Les Teams sont sortis dans `Membership` (`OpenFgaMembership`, `InMemoryMembership`, `membership.contract.ts`), avec un `OpenFgaStore` partagé. `TeamsService` ne dépend plus d'`Authorizer`. Reste ouvert: séparer aussi les grants de la vérification.
 - **Vérifier**: `can`, `accessOn`, `rolesOn`, `expiryOn`, `resourcesWhere`.
 - **Écrire des grants**: `grant`, `revoke`, `revokeAll`, `setParent`, `grantsOn`.
 - **Gérer les Teams**: `teamMembers`, `addTeamMember`, `removeTeamMember`, `teamsOf`.
@@ -17,7 +17,7 @@ La règle "latest expiry parmi Share, Team et Folder" est réimplémentée à la
 **c. Orchestration Postgres + OpenFGA répétée dans les services.**
 `create` fait save, grant, setParent, puis un rollback manuel. `delete`, `move` et les folders ont la même forme. Les "Known gaps" (non-atomicité) le confirment. Piste: un module profond du type `ResourceLifecycle` (`create`/`delete`/`move`) qui cache la compensation et le rollback. Les services n'exposeraient plus que des règles métier.
 
-**d. `sharing.ts` est un fourre-tout** (erreurs HTTP, DTO, helper de date, type guard). Les services `documents` et `folders` y piochent chacun leur morceau. Un module `Sharing` unique, avec `share(resource, input)`, `shares(resource)` et `revoke(...)`, supprimerait la duplication. C'est le meilleur gain de leverage de la liste.
+**d. ✅ Fait — `sharing.ts` est un fourre-tout** (erreurs HTTP, DTO, helper de date, type guard). Les services `documents` et `folders` y piochent chacun leur morceau. Un module `Sharing` unique, avec `share(resource, input)`, `shares(resource)` et `revoke(...)`, supprimerait la duplication. C'est le meilleur gain de leverage de la liste. Le module `Sharing` expose `share`, `shares`, `unshare` et `accessList`; il n'autorise rien, les services vérifient `can_share` avant de l'appeler.
 
 **e. Réconciliation Postgres/OpenFGA** (gap connu).
 Un job ou une commande `reconcile` qui détecte les documents sans grant `owner` et les tuples orphelins. Testable via les deux adapters existants.
@@ -40,21 +40,22 @@ Un job ou une commande `reconcile` qui détecte les documents sans grant `owner`
 
 - **Rate limit par route**: il n'y en a pas (cf. CLAUDE.md). Un throttle plus strict sur les routes de partage et de lecture d'utilisateurs limiterait l'énumération de usernames.
 - **Énumération d'utilisateurs**: `400 No user named "x"` révèle quels usernames existent. Acceptable pour une démo, mais à documenter dans un ADR.
-- **Tests de propriété sur le contrat `Authorizer`**: séquences aléatoires de grants, revokes et moves, comparées entre `InMemoryAuthorizer` et `OpenFgaAuthorizer`. Meilleure défense contre la divergence avec `model.fga`.
+- ✅ **Fait — tests de propriété sur le contrat `Authorizer`** (`authorizer.properties.ts`, comparés à un modèle de `model.fga` sur les deux adapters). Ils ont révélé que `grant` et `addTeamMember` échouaient sur OpenFGA quand le tuple existait déjà; les deux sont maintenant idempotents.
+  Piste d'origine: séquences aléatoires de grants, revokes et moves, comparées entre `InMemoryAuthorizer` et `OpenFgaAuthorizer`. Meilleure défense contre la divergence avec `model.fga`.
 - **Tests e2e web** (Playwright) sur le parcours Share, expiry puis page `access-ended`.
 
 ## 4. Vocabulaire à clarifier (`domain-modeling`)
 
-- **"Share" est ambigu**: nom (le grant) et verbe. Un terme comme *Grant* pour l'objet éviterait la confusion. `Grant` existe déjà dans le code mais pas dans le glossaire.
-- **"Team" est absent du glossaire**, alors qu'il est dans le modèle et dans l'UI.
-- **Scénario à trancher**: un Document partagé avec une Team dont l'Owner quitte le Folder. Que devient l'*Access expiry*?
+- ✅ **Fait — "Share" est ambigu**: nom (le grant) et verbe. Un terme comme *Grant* pour l'objet éviterait la confusion. `Grant` existe déjà dans le code mais pas dans le glossaire.
+- ✅ **Fait — "Team" est absent du glossaire**, alors qu'il est dans le modèle et dans l'UI.
+- ✅ **Tranché — scénario**: un Folder ne perd jamais son Owner, sauf s'il est supprimé, et seul un Folder vide peut l'être. Les Documents ont donc déjà fait l'objet d'un *Move*, qui retire les rôles de l'ancien Folder et recalcule l'*Access expiry*. Rien à ajouter.
 - **ADR candidats** (difficiles à inverser, surprenants, vrai compromis): (1) énumération d'utilisateurs tolérée, (2) règle de calcul d'*Access expiry* côté API plutôt que dans FGA.
 
 ## Ordre recommandé
 
-1. Ajouter *Team* et *Grant* au glossaire (rapide).
-2. Extraire le module `Sharing` (gain de leverage immédiat, refactor sûr grâce aux tests existants).
-3. Séparer `Membership` de `Authorizer`.
+1. ✅ Ajouter *Team* et *Grant* au glossaire (rapide).
+2. ✅ Extraire le module `Sharing` (gain de leverage immédiat, refactor sûr grâce aux tests existants).
+3. ✅ Séparer `Membership` de `Authorizer`.
 4. Ajouter le rôle "Commenter" en TDD, pour valider que le modèle reste souple.
 
 Option: lancer `grilling` sur la piste choisie pour trancher le design avant d'écrire du code.
