@@ -42,6 +42,26 @@ export class KeycloakUserDirectory extends UserDirectory {
     return users.some((user) => user.username.toLowerCase() === username.toLowerCase());
   }
 
+  override async search(prefix: string, limit: number): Promise<string[]> {
+    const url = new URL(this.adminUsersUrl);
+    url.searchParams.set('username', prefix);
+    url.searchParams.set('briefRepresentation', 'true');
+
+    const response = await fetch(url, {
+      headers: { authorization: `Bearer ${await this.token()}` },
+    });
+    if (!response.ok) throw new Error(`Keycloak admin API returned ${response.status}`);
+
+    // Keycloak matches the text anywhere in the username: keep the ones that start with it.
+    const wanted = prefix.toLowerCase();
+    return usersSchema
+      .parse(await response.json())
+      .map((user) => user.username)
+      .filter((name) => name.toLowerCase().startsWith(wanted))
+      .sort()
+      .slice(0, limit);
+  }
+
   /** The service account's access token, fetched once and reused until shortly before it expires. */
   private async token(): Promise<string> {
     if (this.cached && this.cached.expiresAt > Date.now()) return this.cached.value;

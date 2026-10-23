@@ -7,7 +7,7 @@ import { getToken } from "next-auth/jwt";
 import { z } from "zod";
 import { signIn, signOut } from "@/auth";
 import type { ActionState } from "@/lib/action-state";
-import { ApiError, apiPost, apiSend, documentSchema, folderSchema, teamSchema } from "@/lib/api";
+import { ApiError, apiGet, apiPost, apiSend, documentSchema, folderSchema, teamSchema } from "@/lib/api";
 import type { Subject } from "@/lib/api";
 
 const idSchema = z.string().uuid();
@@ -53,6 +53,17 @@ async function run(task: () => Promise<void>, success?: string): Promise<ActionS
 
 function invalid(error: z.ZodError): ActionState {
   return { error: error.issues[0]?.message ?? "Check the form." };
+}
+
+/** Usernames to pick from when sharing, found by the start of the name; an empty list if the search fails. */
+export async function suggestUsers(text: string): Promise<string[]> {
+  try {
+    const path = `/users?q=${encodeURIComponent(z.string().max(100).parse(text))}`;
+    return await apiGet(path, z.array(z.string()));
+  } catch (error) {
+    if (error instanceof ApiError) return [];
+    throw error;
+  }
 }
 
 export async function login(): Promise<void> {

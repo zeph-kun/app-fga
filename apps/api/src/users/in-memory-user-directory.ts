@@ -12,4 +12,10 @@ export class InMemoryUserDirectory extends UserDirectory {
   override exists(username: string): Promise<boolean> {
     return Promise.resolve(this.usernames.has(username));
   }
+
+  override search(prefix: string, limit: number): Promise<string[]> {
+    const wanted = prefix.toLowerCase();
+    const found = [...this.usernames].filter((name) => name.toLowerCase().startsWith(wanted)).sort();
+    return Promise.resolve(found.slice(0, limit));
+  }
 }

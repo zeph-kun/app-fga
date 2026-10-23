@@ -4,7 +4,6 @@ import { Clock, Loader2, UserPlus, Users, Users2, X } from "lucide-react";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -21,6 +20,7 @@ import type { Share, Subject, Team } from "@/lib/api";
 import { ActionForm, SubmitButton } from "./action-form";
 import { ExpiryLabel } from "./expiry-label";
 import { RoleBadge } from "./role-badge";
+import { UserPicker } from "./user-picker";
 
 const ROLE_ITEMS = [
   { value: "viewer", label: "Viewer: can read" },
@@ -108,13 +108,7 @@ export function SharingSheet({
             {subjectType === "user" ? (
               <div className="flex flex-col gap-2">
                 <Label htmlFor="share-subject">Username</Label>
-                <Input
-                  id="share-subject"
-                  name="subjectId"
-                  required
-                  autoComplete="off"
-                  placeholder="e.g. bob"
-                />
+                <UserPicker id="share-subject" name="subjectId" />
               </div>
             ) : (
               <div className="flex flex-col gap-2">

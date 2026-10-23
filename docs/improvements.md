@@ -39,7 +39,7 @@ Un job ou une commande `reconcile` qui détecte les documents sans grant `owner`
 ## 3. Qualité et sécurité
 
 - **Rate limit par route**: il n'y en a pas (cf. CLAUDE.md). Un throttle plus strict sur les routes de partage et de lecture d'utilisateurs limiterait l'énumération de usernames.
-- **Énumération d'utilisateurs**: `400 No user named "x"` révèle quels usernames existent. Acceptable pour une démo, mais à documenter dans un ADR.
+- ✅ **Fait — énumération d'utilisateurs**: le panneau de partage propose maintenant les utilisateurs Keycloak (`GET /users?q=`, préfixe, 8 au plus, sans l'appelant), et l'ADR 0004 acte que tout utilisateur connecté peut les chercher. Reste ouvert: un throttle par route, et le même sélecteur pour ajouter un membre à une Team.
 - ✅ **Fait — tests de propriété sur le contrat `Authorizer`** (`authorizer.properties.ts`, comparés à un modèle de `model.fga` sur les deux adapters). Ils ont révélé que `grant` et `addTeamMember` échouaient sur OpenFGA quand le tuple existait déjà; les deux sont maintenant idempotents.
   Piste d'origine: séquences aléatoires de grants, revokes et moves, comparées entre `InMemoryAuthorizer` et `OpenFgaAuthorizer`. Meilleure défense contre la divergence avec `model.fga`.
 - **Tests e2e web** (Playwright) sur le parcours Share, expiry puis page `access-ended`.
@@ -49,7 +49,7 @@ Un job ou une commande `reconcile` qui détecte les documents sans grant `owner`
 - ✅ **Fait — "Share" est ambigu**: nom (le grant) et verbe. Un terme comme *Grant* pour l'objet éviterait la confusion. `Grant` existe déjà dans le code mais pas dans le glossaire.
 - ✅ **Fait — "Team" est absent du glossaire**, alors qu'il est dans le modèle et dans l'UI.
 - ✅ **Tranché — scénario**: un Folder ne perd jamais son Owner, sauf s'il est supprimé, et seul un Folder vide peut l'être. Les Documents ont donc déjà fait l'objet d'un *Move*, qui retire les rôles de l'ancien Folder et recalcule l'*Access expiry*. Rien à ajouter.
-- **ADR candidats** (difficiles à inverser, surprenants, vrai compromis): (1) énumération d'utilisateurs tolérée, (2) règle de calcul d'*Access expiry* côté API plutôt que dans FGA.
+- **ADR candidats** (difficiles à inverser, surprenants, vrai compromis): (1) ✅ énumération d'utilisateurs tolérée (ADR 0004), (2) règle de calcul d'*Access expiry* côté API plutôt que dans FGA.
 
 ## Ordre recommandé
 

@@ -52,7 +52,7 @@ Keycloak's User Profile requires `lastName`: a user created without one can't lo
 - FGA subject is `user:<Keycloak preferred_username>` (see `docs/adr/0001-username-as-fga-subject.md`).
 - Documents the caller cannot view return 404, not 403, so existence is not leaked.
 - Sharing a Document or Folder with its own Owner is rejected (403): the Owner already has full access.
-- Sharing with an unknown username is rejected (400): `UserDirectory` (`apps/api/src/users`) checks it against Keycloak's Admin REST API first, using the `api-service` client (a service account with the realm's `view-users` role). `InMemoryUserDirectory` is the test adapter, seeded with the usernames a test needs.
+- Sharing with an unknown username is rejected (400): `UserDirectory` (`apps/api/src/users`) checks it against Keycloak's Admin REST API first, using the `api-service` client (a service account with the realm's `view-users` role). `InMemoryUserDirectory` is the test adapter, seeded with the usernames a test needs. The same directory feeds the sharing panel's picker through `GET /users?q=` (`UsersService.suggest`, any signed-in User, see `docs/adr/0004-any-user-can-search-the-user-directory.md`).
 - A global rate limit (`RATE_LIMIT_PER_MINUTE`, default 120/min per IP, via `@nestjs/throttler`) protects every route; there is no per-route tuning yet.
 - OpenFGA requires a preshared key (`OPENFGA_API_TOKEN` / `OPENFGA_PRESHARED_KEY`, see `.env.example`): its HTTP API has no auth otherwise. This is why the Playground (`:3001`) is disabled — it only works with `authn-method: none`.
 - The access token never reaches the browser: it stays in the encrypted Auth.js cookie and is read server-side in `apps/web/src/lib/api.ts`. Mutations are Server Actions.
