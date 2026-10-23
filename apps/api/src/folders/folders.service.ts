@@ -3,20 +3,10 @@ import { ConflictException, ForbiddenException, Injectable, NotFoundException } 
 import { Authorizer, type Permission, type Role, folderRef, userSubject } from '../authorization/authorizer.js';
 import type { Document } from '../documents/document.js';
 import { DocumentRepository } from '../documents/document-repository.js';
-import {
-  expiresAtFrom,
-  isSharedRole,
-  nameOfSubject,
-  requireSubjectExists,
-  type ShareEntry,
-  type ShareInput,
-} from '../sharing/sharing.js';
-import { TeamRepository } from '../teams/team-repository.js';
-import { UserDirectory } from '../users/user-directory.js';
+import { Sharing, type ShareEntry, type ShareInput } from '../sharing/sharing.js';
 import type { Folder } from './folder.js';
 import { FolderRepository } from './folder-repository.js';
 
-export type { ShareInput } from '../sharing/sharing.js';
 
 /** A folder together with the strongest access the requesting user holds on it, and the documents they can see in it. */
 export interface FolderView extends Folder {
@@ -43,8 +33,7 @@ export class FoldersService {
     private readonly authorizer: Authorizer,
     private readonly folders: FolderRepository,
     private readonly documents: DocumentRepository,
-    private readonly users: UserDirectory,
-    private readonly teams: TeamRepository,
+    private readonly sharing: Sharing,
   ) {}
 
   async create(userId: string, input: CreateFolderInput): Promise<Folder> {
@@ -92,42 +81,25 @@ export class FoldersService {
     await this.authorizer.revokeAll(folderRef(id));
   }
 
-  async share(userId: string, id: string, { subject, role, expiresInHours }: ShareInput): Promise<void> {
+  async share(userId: string, id: string, input: ShareInput): Promise<void> {
     const folder = await this.require(userId, 'can_share', id);
-    if (subject.type === 'user' && subject.id === folder.ownerId) {
-      throw new ForbiddenException('The owner already has full access');
-    }
-    await requireSubjectExists(subject, this.users, this.teams);
-    const ref = folderRef(id);
-    await this.authorizer.revoke(subject, role === 'editor' ? 'viewer' : 'editor', ref);
-    await this.authorizer.grant(subject, role, ref, expiresAtFrom(expiresInHours));
+    await this.sharing.share(folderRef(id), folder.ownerId, input);
   }
 
   async shares(userId: string, id: string): Promise<ShareEntry[]> {
     await this.require(userId, 'can_share', id);
-    const grants = await this.authorizer.grantsOn(folderRef(id));
-    const entries = await Promise.all(
-      grants
-        .filter(isSharedRole)
-        .map(async (g) => ({ ...g, name: await nameOfSubject(g.subject, this.teams) })),
-    );
-    return entries;
+    return this.sharing.shares(folderRef(id));
   }
 
   async unshare(userId: string, id: string, subject: ShareInput['subject']): Promise<void> {
     const folder = await this.require(userId, 'can_share', id);
-    if (subject.type === 'user' && subject.id === folder.ownerId) {
-      throw new ForbiddenException('The owner cannot be removed');
-    }
-    const ref = folderRef(id);
-    await this.authorizer.revoke(subject, 'editor', ref);
-    await this.authorizer.revoke(subject, 'viewer', ref);
+    await this.sharing.unshare(folderRef(id), folder.ownerId, subject);
   }
 
   /** Every user who can view this folder, Teams and membership resolved — for an access review. */
   async accessList(userId: string, id: string): Promise<string[]> {
     await this.require(userId, 'can_share', id);
-    return this.authorizer.usersWithAccess(folderRef(id), 'can_view');
+    return this.sharing.accessList(folderRef(id));
   }
 
   /**

@@ -21,7 +21,7 @@ function setupWithFolders() {
   return {
     authorizer,
     documents: new DocumentsService(authorizer, documents, folders, new Sharing(authorizer, users, teams)),
-    folders: new FoldersService(authorizer, folders, documents, users, teams),
+    folders: new FoldersService(authorizer, folders, documents, new Sharing(authorizer, users, teams)),
     teams: new TeamsService(authorizer, teams, users),
   };
 }
@@ -273,7 +273,7 @@ describe('DocumentsService', () => {
       const users = new InMemoryUserDirectory();
       const teams = new InMemoryTeamRepository();
       const documents = new DocumentsService(authorizer, documentRepository, folderRepository, new Sharing(authorizer, users, teams));
-      const folders = new FoldersService(authorizer, folderRepository, documentRepository, users, teams);
+      const folders = new FoldersService(authorizer, folderRepository, documentRepository, new Sharing(authorizer, users, teams));
       const folder = await folders.create('alice', { name: 'Projects' });
       const doc = await documents.create('alice', { title: 'Plan', content: '' });
 

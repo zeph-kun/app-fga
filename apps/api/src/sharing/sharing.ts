@@ -20,7 +20,7 @@ export interface ShareEntry {
 }
 
 /** Throws 400 if the User or Team named by `subject` does not exist. */
-export async function requireSubjectExists(
+async function requireSubjectExists(
   subject: Subject,
   users: UserDirectory,
   teams: TeamRepository,
@@ -35,18 +35,18 @@ export async function requireSubjectExists(
 }
 
 /** The name to show for a Share's subject: the username, or the Team's name. */
-export async function nameOfSubject(subject: Subject, teams: TeamRepository): Promise<string> {
+async function nameOfSubject(subject: Subject, teams: TeamRepository): Promise<string> {
   if (subject.type === 'user') return subject.id;
   const team = await teams.findById(subject.id);
   return team?.name ?? 'Deleted team';
 }
 
-export function expiresAtFrom(expiresInHours: number | undefined): Date | undefined {
+function expiresAtFrom(expiresInHours: number | undefined): Date | undefined {
   return expiresInHours === undefined ? undefined : new Date(Date.now() + expiresInHours * 3_600_000);
 }
 
 /** The Owner's grant is never listed as a Share. */
-export function isSharedRole(grant: Grant): grant is Grant & { role: 'editor' | 'viewer' } {
+function isSharedRole(grant: Grant): grant is Grant & { role: 'editor' | 'viewer' } {
   return grant.role !== 'owner';
 }
 

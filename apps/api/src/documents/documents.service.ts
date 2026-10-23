@@ -14,7 +14,6 @@ import type { Document } from './document.js';
 import { DocumentRepository } from './document-repository.js';
 
 export type { Document } from './document.js';
-export type { ShareInput } from '../sharing/sharing.js';
 
 /** A document together with the strongest access the requesting user holds on it. */
 export interface DocumentView extends Document {
