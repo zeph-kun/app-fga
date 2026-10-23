@@ -19,7 +19,7 @@ import {
 import type { ActionState } from "@/lib/action-state";
 import type { Share, Subject, Team } from "@/lib/api";
 import { ActionForm, SubmitButton } from "./action-form";
-import { expiryLabel } from "./expiry-label";
+import { ExpiryLabel } from "./expiry-label";
 import { RoleBadge } from "./role-badge";
 
 const ROLE_ITEMS = [
@@ -181,7 +181,6 @@ export function SharingSheet({
             ) : (
               <ul className="divide-y rounded-lg border">
                 {shares.map((share) => {
-                  const expires = expiryLabel(share.expiresAt);
                   return (
                     <li key={subjectKey(share.subject)} className="flex items-center gap-3 px-3 py-2">
                       {share.subject.type === "team" ? (
@@ -191,10 +190,10 @@ export function SharingSheet({
                       )}
                       <span className="min-w-0 flex-1">
                         <span className="block truncate font-medium">{share.name}</span>
-                        {expires && (
+                        {share.expiresAt && (
                           <span className="flex items-center gap-1 text-xs text-muted-foreground">
                             <Clock aria-hidden className="size-3" />
-                            {expires}
+                            <ExpiryLabel expiresAt={share.expiresAt} />
                           </span>
                         )}
                       </span>

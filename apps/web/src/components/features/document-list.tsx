@@ -1,6 +1,7 @@
 import { FileText } from "lucide-react";
 import Link from "next/link";
 import type { Role } from "@/lib/api";
+import { ExpiryLabel } from "./expiry-label";
 import { RoleBadge } from "./role-badge";
 
 interface Item {
@@ -9,6 +10,7 @@ interface Item {
   readonly ownerId: string;
   readonly folderId: string | null;
   readonly access?: Role;
+  readonly accessExpiresAt?: Date;
 }
 
 /** Documents as a list of links. `folderNames` adds the folder to the subtitle when it is known. */
@@ -36,6 +38,12 @@ export function DocumentList({
                 <span className="block truncate font-medium">{doc.title}</span>
                 <span className="block truncate text-xs text-muted-foreground">
                   {folder ? `${folder} · ` : ""}by {doc.ownerId}
+                  {doc.accessExpiresAt && (
+                    <>
+                      {" · "}
+                      <ExpiryLabel prefix="Your access ends in" expiresAt={doc.accessExpiresAt} />
+                    </>
+                  )}
                 </span>
               </span>
               {doc.access && <RoleBadge role={doc.access} />}

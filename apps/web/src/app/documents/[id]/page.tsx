@@ -1,9 +1,11 @@
+import { Clock } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 import { AccessList } from "@/components/features/access-list";
 import { ConfirmDelete } from "@/components/features/confirm-delete";
 import { DocumentEditor } from "@/components/features/document-editor";
+import { ExpiryLabel } from "@/components/features/expiry-label";
 import { MoveDocument } from "@/components/features/move-document";
 import { RoleBadge } from "@/components/features/role-badge";
 import { SharingSheet } from "@/components/features/sharing-sheet";
@@ -95,6 +97,16 @@ export default async function DocumentPage({ params }: PageProps<"/documents/[id
           </div>
         )}
       </div>
+
+      {doc.accessExpiresAt && (
+        <div
+          role="status"
+          className="mb-4 flex items-center gap-2 rounded-lg border bg-muted/60 px-3 py-2 text-sm"
+        >
+          <Clock aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+          <ExpiryLabel prefix="Your access to this document ends in" expiresAt={doc.accessExpiresAt} />
+        </div>
+      )}
 
       <DocumentEditor
         key={`${doc.title}\u0000${doc.content}`}

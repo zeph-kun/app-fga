@@ -49,6 +49,8 @@ export const folderSummarySchema = folderSchema.extend({
 
 export const documentViewSchema = documentSchema.extend({
   access: z.enum(["owner", "editor", "viewer"]),
+  /** When the caller's access ends; absent if it never does. */
+  accessExpiresAt: z.coerce.date().optional(),
 });
 
 export const folderViewSchema = folderSchema.extend({
