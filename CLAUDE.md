@@ -21,7 +21,7 @@ npm run install:all   # install both apps
 npm run dev:api       # http://localhost:4000 (run `npm run db:deploy` once first)
 npm run dev:web       # http://localhost:3000
 npm test              # API unit tests (no Docker needed), property tests on the in-memory adapters included
-npm --prefix apps/api run test:integration   # adapter contract and property tests against Docker Postgres and OpenFGA
+npm --prefix apps/api run test:integration   # adapter contract and property tests against Docker Postgres and OpenFGA: their own `app_test` database and `app-fga-test` store (created and migrated on the first run), never the app's data
 npm run typecheck     # tsc --noEmit on both apps
 npm run reconcile     # list Postgres/OpenFGA differences (stop the API first); `npm run reconcile -- --apply` repairs them
 ```
@@ -46,6 +46,7 @@ Keycloak's User Profile requires `lastName`: a user created without one can't lo
 - **Creating, moving and deleting Documents and Folders goes through `ResourceLifecycle`** (`apps/api/src/lifecycle`), which owns the Postgres + OpenFGA write order and the undo on failure; services only apply business rules and read through the repositories. `Reconciler` (`npm run reconcile`) repairs what a crash between the two writes leaves behind, with Postgres as the source of truth.
 - **Giving, listing and revoking Grants goes through `Sharing`** (`apps/api/src/sharing`). It does not authorize: the Documents and Folders services check `can_share` first, then pass the resource and its Owner.
 - **Documents and Folders are stored through `DocumentRepository` / `FolderRepository`** (`apps/api/src/documents`, `apps/api/src/folders`); only the `Prisma*Repository` adapters touch Prisma. Run the shared contract (`*-repository.contract.ts`) against any new adapter. The generated client (`src/generated`) is git-ignored and rebuilt by `postinstall`.
+- **Integration specs never touch the app's data**: the Prisma specs empty their tables before each test, so `vitest.config.integration.ts` points `DATABASE_URL` at `app_test` (`TEST_DATABASE_URL` overrides it; its name must end in `_test` or the run refuses to start) and `test/integration-setup.ts` creates and migrates it. The OpenFGA specs use the `app-fga-test` store. Keep new integration specs on the same two.
 - The OpenFGA model lives in `infra/openfga/model.fga`; the API creates the store and writes the model at startup. Keep `InMemoryAuthorizer` and the oracle in `authorizer.properties.ts` in sync with it.
 - Folders: one parent per document, roles inherited, no nesting (see `docs/adr/0003-folders-inherit-roles-and-permissions-are-checked.md`). Changing `infra/openfga/model.fga` means updating `InMemoryAuthorizer`, `authorizer.contract.ts` and `authorizer.properties.ts` too.
 - FGA subject is `user:<Keycloak preferred_username>` (see `docs/adr/0001-username-as-fga-subject.md`).
