@@ -354,6 +354,62 @@ export function authorizerContract(
       });
     });
 
+    describe('expiryOn', () => {
+      it('reports when a time-limited grant ends, and null for a permanent one or no access', async () => {
+        const authorizer = await create();
+        const limited = documentRef(randomUUID());
+        const permanent = documentRef(randomUUID());
+        await authorizer.grant(userSubject('alice'), 'viewer', limited, inAnHour);
+        await authorizer.grant(userSubject('alice'), 'viewer', permanent);
+
+        expect((await authorizer.expiryOn('alice', limited))?.getTime()).toBe(inAnHour.getTime());
+        expect(await authorizer.expiryOn('alice', permanent)).toBeNull();
+        expect(await authorizer.expiryOn('bob', limited)).toBeNull();
+      });
+
+      it('follows a Team grant, and a permanent path outlasts a limited one', async () => {
+        const authorizer = await create();
+        const teamId = randomUUID();
+        const viaTeam = documentRef(randomUUID());
+        const both = documentRef(randomUUID());
+        await authorizer.addTeamMember(teamId, 'alice');
+        await authorizer.grant(teamSubject(teamId), 'viewer', viaTeam, inAnHour);
+        await authorizer.grant(teamSubject(teamId), 'viewer', both);
+        await authorizer.grant(userSubject('alice'), 'viewer', both, inAnHour);
+
+        expect((await authorizer.expiryOn('alice', viaTeam))?.getTime()).toBe(inAnHour.getTime());
+        expect(await authorizer.expiryOn('alice', both)).toBeNull();
+      });
+
+      it('takes the latest end among limited paths', async () => {
+        const authorizer = await create();
+        const teamId = randomUUID();
+        const doc = documentRef(randomUUID());
+        const inTwoHours = new Date(inAnHour.getTime() + 3_600_000);
+        await authorizer.addTeamMember(teamId, 'alice');
+        await authorizer.grant(teamSubject(teamId), 'viewer', doc, inTwoHours);
+        await authorizer.grant(userSubject('alice'), 'editor', doc, inAnHour);
+
+        expect((await authorizer.expiryOn('alice', doc))?.getTime()).toBe(inTwoHours.getTime());
+      });
+
+      it('follows the folder a document is in', async () => {
+        const authorizer = await create();
+        const aFolder = folderRef(randomUUID());
+        const doc = documentRef(randomUUID());
+        const permanentFolder = folderRef(randomUUID());
+        const inPermanent = documentRef(randomUUID());
+        await authorizer.setParent(doc.id, aFolder.id);
+        await authorizer.grant(userSubject('alice'), 'viewer', aFolder, inAnHour);
+        await authorizer.setParent(inPermanent.id, permanentFolder.id);
+        await authorizer.grant(userSubject('alice'), 'viewer', permanentFolder);
+        await authorizer.grant(userSubject('alice'), 'viewer', inPermanent, inAnHour);
+
+        expect((await authorizer.expiryOn('alice', doc))?.getTime()).toBe(inAnHour.getTime());
+        expect(await authorizer.expiryOn('alice', inPermanent)).toBeNull();
+      });
+    });
+
     describe('usersWithAccess', () => {
       it('resolves direct grants, team membership, and folder inheritance into a flat list', async () => {
         const authorizer = await create();

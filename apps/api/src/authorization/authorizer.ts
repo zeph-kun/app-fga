@@ -46,6 +46,31 @@ export abstract class Authorizer {
     return null;
   }
 
+  /**
+   * When the user's access to a resource ends, or `null` if it never does (or they have none).
+   * For display: guard actions with `can`.
+   */
+  async expiryOn(userId: string, resource: Resource): Promise<Date | null> {
+    const parent = resource.type === 'document' ? await this.parentOf(resource.id) : null;
+    const [teams, ...grantLists] = await Promise.all([
+      this.teamsOf(userId),
+      this.grantsOn(resource),
+      ...(parent === null ? [] : [this.grantsOn(folderRef(parent))]),
+    ]);
+    const now = Date.now();
+    let latest: Date | null = null;
+    for (const { subject, expiresAt } of grantLists.flat()) {
+      const mine = subject.type === 'user' ? subject.id === userId : teams?.includes(subject.id);
+      if (!mine) continue;
+      if (!expiresAt) return null;
+      if (expiresAt.getTime() > now && (!latest || expiresAt > latest)) latest = expiresAt;
+    }
+    return latest;
+  }
+
+  /** The folder a document is in, or `null`. */
+  abstract parentOf(documentId: string): Promise<string | null>;
+
   /** `expiresAt`, if given, makes the grant stop applying once that time passes. */
   abstract grant(subject: Subject, role: Role, resource: Resource, expiresAt?: Date): Promise<void>;
 

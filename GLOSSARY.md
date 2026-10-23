@@ -12,6 +12,10 @@
 
 **Share**: giving another User Editor or Viewer access to a Document. Sharing again with a different role replaces the previous one.
 
+**Expiry**: the moment a time-limited Share stops applying; a Share without one lasts until it is revoked. The Owner sets it when sharing and sees it in the Shares list.
+
+**Access expiry**: the moment a User's own access to a Document ends, shown to them as the time left. It is the latest Expiry among all the ways they have access (own Share, Team, Folder), and there is none if any of those never expires, or if they are the Owner.
+
 **Shares list**: the Users a Document is currently shared with and their role. Only the Owner can see it; it never includes the Owner.
 
 **Folder**: a named container for Documents, created by a User who becomes its Owner. A Document is in at most one Folder; Folders do not nest. Owner, Editor and Viewer mean the same on a Folder, and a role held on a Folder also applies to every Document in it. Only an empty Folder can be deleted.

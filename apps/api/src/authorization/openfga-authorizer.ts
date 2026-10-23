@@ -155,6 +155,12 @@ export class OpenFgaAuthorizer extends Authorizer implements OnModuleInit {
     await this.client.write({ writes, deletes }, ignoreMissingDeletes);
   }
 
+  override async parentOf(documentId: string): Promise<string | null> {
+    const tuples = await this.tuplesOn(objectOf({ type: 'document', id: documentId }));
+    const parent = tuples.find((t) => t.relation === 'parent');
+    return parent ? parent.user.slice('folder:'.length) : null;
+  }
+
   override async teamMembers(teamId: string): Promise<string[]> {
     const tuples = await this.tuplesOn(`team:${teamId}`);
     return tuples

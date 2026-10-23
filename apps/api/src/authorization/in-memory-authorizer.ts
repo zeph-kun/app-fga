@@ -81,6 +81,10 @@ export class InMemoryAuthorizer extends Authorizer {
     return Promise.resolve();
   }
 
+  override parentOf(documentId: string): Promise<string | null> {
+    return Promise.resolve(this.parents.get(documentId) ?? null);
+  }
+
   override teamMembers(teamId: string): Promise<string[]> {
     return Promise.resolve([...(this.teams.get(teamId) ?? [])]);
   }

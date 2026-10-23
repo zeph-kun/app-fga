@@ -28,6 +28,8 @@ export type { ShareInput } from '../sharing/sharing.js';
 /** A document together with the strongest access the requesting user holds on it. */
 export interface DocumentView extends Document {
   readonly access: Role;
+  /** When the requesting user's access ends; absent if it never does. */
+  readonly accessExpiresAt?: Date;
 }
 
 export interface CreateDocumentInput {
@@ -76,14 +78,26 @@ export class DocumentsService {
   async list(userId: string): Promise<DocumentView[]> {
     const roles = await this.authorizer.rolesOn(userId, 'document');
     const documents = await this.repository.findByIds([...roles.keys()]);
-    return documents.map((document) => ({ ...document, access: roles.get(document.id) ?? 'viewer' }));
+    return Promise.all(
+      documents.map(async (document) => {
+        const access = roles.get(document.id) ?? 'viewer';
+        return { ...document, access, ...(await this.expiryFor(userId, document.id, access)) };
+      }),
+    );
   }
 
   async get(userId: string, id: string): Promise<DocumentView> {
     const document = await this.require(userId, 'can_view', id);
     const ref = documentRef(id);
     const access: Role = (await this.authorizer.accessOn(userId, ref)) ?? 'viewer';
-    return { ...document, access };
+    return { ...document, access, ...(await this.expiryFor(userId, id, access)) };
+  }
+
+  /** Owners never lose access, so skip the lookup for them. */
+  private async expiryFor(userId: string, id: string, access: Role): Promise<{ accessExpiresAt?: Date }> {
+    if (access === 'owner') return {};
+    const accessExpiresAt = await this.authorizer.expiryOn(userId, documentRef(id));
+    return accessExpiresAt ? { accessExpiresAt } : {};
   }
 
   async update(userId: string, id: string, patch: UpdateDocumentInput): Promise<Document> {
