@@ -1,7 +1,7 @@
-import { BadRequestException } from '@nestjs/common';
-import type { Grant, Subject } from '../authorization/authorizer.js';
-import type { TeamRepository } from '../teams/team-repository.js';
-import type { UserDirectory } from '../users/user-directory.js';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import { Authorizer, type Grant, type Resource, type Subject } from '../authorization/authorizer.js';
+import { TeamRepository } from '../teams/team-repository.js';
+import { UserDirectory } from '../users/user-directory.js';
 
 /** What the API takes to create or replace a Share: who, which role, for how long. */
 export interface ShareInput {
@@ -48,4 +48,49 @@ export function expiresAtFrom(expiresInHours: number | undefined): Date | undefi
 /** The Owner's grant is never listed as a Share. */
 export function isSharedRole(grant: Grant): grant is Grant & { role: 'editor' | 'viewer' } {
   return grant.role !== 'owner';
+}
+
+/**
+ * Giving, listing and taking away Grants on a Document or Folder. The caller has
+ * already checked that the requester may share `resource` and passes its Owner.
+ */
+@Injectable()
+export class Sharing {
+  constructor(
+    private readonly authorizer: Authorizer,
+    private readonly users: UserDirectory,
+    private readonly teams: TeamRepository,
+  ) {}
+
+  async share(resource: Resource, ownerId: string, { subject, role, expiresInHours }: ShareInput): Promise<void> {
+    if (subject.type === 'user' && subject.id === ownerId) {
+      throw new ForbiddenException('The owner already has full access');
+    }
+    await requireSubjectExists(subject, this.users, this.teams);
+    await this.authorizer.revoke(subject, role === 'editor' ? 'viewer' : 'editor', resource);
+    await this.authorizer.grant(subject, role, resource, expiresAtFrom(expiresInHours));
+  }
+
+  async shares(resource: Resource): Promise<ShareEntry[]> {
+    const grants = await this.authorizer.grantsOn(resource);
+    return Promise.all(
+      grants
+        .filter(isSharedRole)
+        .map(async (g) => ({ ...g, name: await nameOfSubject(g.subject, this.teams) })),
+    );
+  }
+
+  /** Removes the Grant of `subject` whatever its role. */
+  async unshare(resource: Resource, ownerId: string, subject: Subject): Promise<void> {
+    if (subject.type === 'user' && subject.id === ownerId) {
+      throw new ForbiddenException('The owner cannot be removed');
+    }
+    await this.authorizer.revoke(subject, 'editor', resource);
+    await this.authorizer.revoke(subject, 'viewer', resource);
+  }
+
+  /** Every User who can view `resource`, Teams and folder inheritance resolved — for an access review. */
+  accessList(resource: Resource): Promise<string[]> {
+    return this.authorizer.usersWithAccess(resource, 'can_view');
+  }
 }
