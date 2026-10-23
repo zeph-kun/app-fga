@@ -1,0 +1,7 @@
+# Only Managers create Teams, through an `organization` object in the model
+
+`infra/openfga/model.fga` has a type `organization` with one instance, `organization:main`. Its `manager` relation holds the Users listed in the `MANAGERS` setting, and `can_create_team` is true for them only. `TeamsService.create` asks the `Authorizer` (`can(user, 'can_create_team', organizationRef())`), like any other permission.
+
+**Why:** the rule had to live where every other access decision lives, so the model, the in-memory adapter and the property tests describe it together. A Keycloak realm role read from the token would have put one decision outside the `Authorizer`. The list comes from an environment variable and is applied at startup (`ManagersBootstrap`, through `Managers.sync`), because there is no administration page yet and a short, declarative list is enough for a demo.
+
+**Consequences:** this is the first object in the model that is not a Document, Folder or Team, and the only one with a single instance. Adding a Manager means changing `MANAGERS` and restarting the API; removing one revokes them at the next start. A removed Manager keeps managing the Teams they own (only creating is restricted). A username in `MANAGERS` that Keycloak does not know is warned about, not refused. The default (`florian,adham,jeremy`) is for development: override it anywhere else. If who may manage Teams ever needs to change at runtime, `Managers.add`/`remove` are already there for an administration page.

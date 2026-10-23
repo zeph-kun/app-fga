@@ -32,6 +32,12 @@ export const shareSchema = z.object({
   expiresAt: z.coerce.date().optional(),
 });
 
+export const meSchema = z.object({
+  id: z.string(),
+  /** Only Managers may create Teams. */
+  canCreateTeam: z.boolean(),
+});
+
 export const teamSchema = z.object({
   id: z.string(),
   name: z.string(),

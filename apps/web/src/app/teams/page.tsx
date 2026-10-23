@@ -5,7 +5,7 @@ import { z } from "zod";
 import { CreateDialog } from "@/components/features/create-dialog";
 import { EmptyState } from "@/components/features/empty-state";
 import { PageShell } from "@/components/layout/page-shell";
-import { apiGet, teamSchema } from "@/lib/api";
+import { apiGet, meSchema, teamSchema } from "@/lib/api";
 import { createTeam } from "../actions";
 
 export const metadata: Metadata = { title: "Teams" };
@@ -23,22 +23,26 @@ const NEW_TEAM = {
 } as const;
 
 export default async function TeamsPage() {
-  const teams = await apiGet("/teams", z.array(teamSchema));
+  const [teams, me] = await Promise.all([apiGet("/teams", z.array(teamSchema)), apiGet("/me", meSchema)]);
 
   return (
     <PageShell>
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-xl font-semibold tracking-tight">Teams</h1>
-          {teams.length > 0 && <CreateDialog {...NEW_TEAM} variant="outline" />}
+          {me.canCreateTeam && teams.length > 0 && <CreateDialog {...NEW_TEAM} variant="outline" />}
         </div>
         {teams.length === 0 ? (
           <EmptyState
             icon={Users2}
             title="No teams yet"
-            description="Create a team, add its members, then share with the team instead of one person at a time."
+            description={
+              me.canCreateTeam
+                ? "Create a team, add its members, then share with the team instead of one person at a time."
+                : "Ask a manager to create a team. Once you are a member, you can share with it instead of one person at a time."
+            }
           >
-            <CreateDialog {...NEW_TEAM} />
+            {me.canCreateTeam && <CreateDialog {...NEW_TEAM} />}
           </EmptyState>
         ) : (
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

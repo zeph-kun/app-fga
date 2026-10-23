@@ -18,6 +18,8 @@ _Avoid_: Permission, access right
 **Team**: a named group of Users, created by a User who becomes its Team owner. Granting a role to a Team gives it to every member, so adding or removing a member changes their access without touching the Grants. Only the Team owner manages its name and members, and cannot be removed from it.
 _Avoid_: Group
 
+**Manager**: a User allowed to create Teams. Managers are the usernames in the `MANAGERS` setting. Being a Manager gives no access to anyone else's Teams, Documents or Folders; a User who owns a Team keeps managing it after they stop being a Manager.
+
 **Expiry**: the moment a time-limited Grant stops applying; a Grant without one lasts until it is revoked. The Owner sets it when sharing and sees it in the Shares list.
 
 **Access expiry**: the moment a User's own access to a Document ends, shown to them as the time left. It is the latest Expiry among all the ways they have access (own Grant, Team, Folder), and there is none if any of those never expires, or if they are the Owner.
