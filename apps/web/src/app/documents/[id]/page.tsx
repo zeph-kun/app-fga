@@ -100,11 +100,15 @@ export default async function DocumentPage({ params }: PageProps<"/documents/[id
 
       {doc.accessExpiresAt && (
         <div
-          role="status"
+          role="timer"
           className="mb-4 flex items-center gap-2 rounded-lg border bg-muted/60 px-3 py-2 text-sm"
         >
           <Clock aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-          <ExpiryLabel prefix="Your access to this document ends in" expiresAt={doc.accessExpiresAt} />
+          <ExpiryLabel
+            prefix="Your access to this document ends in"
+            expiresAt={doc.accessExpiresAt}
+            onExpiredGoTo={`/access-ended?${new URLSearchParams({ title: doc.title })}`}
+          />
         </div>
       )}
 

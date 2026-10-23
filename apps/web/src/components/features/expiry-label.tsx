@@ -3,11 +3,20 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-/** "59 minutes", "1 hour 5 min", "2 days 3 hours": what is left until `expiresAt`, rounded up to the minute. */
+const HOUR = 3_600_000;
+
+/**
+ * "2 days 3 hours", "1 hour 5 min", "59 min 30 s", "12 seconds": what is left until `expiresAt`.
+ * Rounded up to the minute above an hour, to the second below it.
+ */
 export function timeLeft(expiresAt: Date, now: number): string {
+  const ms = expiresAt.getTime() - now;
+  if (ms <= HOUR) {
+    const seconds = Math.max(1, Math.ceil(ms / 1000));
+    if (seconds < 60) return plural(seconds, "second");
+    return seconds % 60 ? `${Math.floor(seconds / 60)} min ${seconds % 60} s` : plural(seconds / 60, "minute");
+  }
   const minutes = Math.max(0, Math.ceil((expiresAt.getTime() - now) / 60_000));
-  if (minutes < 1) return "less than a minute";
-  if (minutes < 60) return plural(minutes, "minute");
   const hours = Math.floor(minutes / 60);
   if (hours < 24) {
     const rest = minutes % 60;
@@ -23,22 +32,33 @@ function plural(n: number, unit: string): string {
 }
 
 /**
- * A live countdown to `expiresAt`, e.g. "Expires in 59 minutes", updated every 15 seconds.
- * Once the time has passed the page is refreshed, since the access it describes is gone.
+ * A live countdown to `expiresAt`, e.g. "Expires in 59 min 30 s": it ticks every second during
+ * the last hour and every 15 seconds before. Once the time has passed, the User is sent to
+ * `onExpiredGoTo` if given (the access it describes is gone), else the page is refreshed.
  */
-export function ExpiryLabel({ expiresAt, prefix = "Expires in" }: { expiresAt: Date; prefix?: string }) {
+export function ExpiryLabel({
+  expiresAt,
+  prefix = "Expires in",
+  onExpiredGoTo,
+}: {
+  expiresAt: Date;
+  prefix?: string;
+  onExpiredGoTo?: string;
+}) {
   const router = useRouter();
   const [now, setNow] = useState(() => Date.now());
   const expired = expiresAt.getTime() <= now;
+  const lastHour = expiresAt.getTime() - now <= HOUR;
 
   useEffect(() => {
     if (expired) {
-      router.refresh();
+      if (onExpiredGoTo) router.replace(onExpiredGoTo);
+      else router.refresh();
       return;
     }
-    const timer = setInterval(() => setNow(Date.now()), 15_000);
+    const timer = setInterval(() => setNow(Date.now()), lastHour ? 1000 : 15_000);
     return () => clearInterval(timer);
-  }, [expired, router]);
+  }, [expired, lastHour, onExpiredGoTo, router]);
 
   // The server render and the first client render can differ by a few seconds.
   return (
