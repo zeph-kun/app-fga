@@ -26,7 +26,7 @@ Un job ou une commande `reconcile` qui détecte les documents sans grant `owner`
 
 | Feature | Intérêt FGA | Remarque |
 |---|---|---|
-| Journal d'audit ("qui a partagé quoi, quand") | Moyen | Concerne les Owners. Les événements Share, Revoke et Move existent déjà. |
+| ✅ Fait — Journal d'audit ("qui a partagé quoi, quand") | Moyen | Appelé *Activity log* dans le domaine (ADR 0008): au mieux, dans Postgres, supprimé avec sa ressource, 50 dernières entrées pour l'Owner. |
 | ✅ Fait — Liens de partage / invitation par lien | Élevé | Finalement un lien qui devient un Grant quand un User connecté l'accepte (ADR 0007), pas un sujet FGA `link`. Pas de limite d'usage, pas de lien anonyme. |
 | Dossiers imbriqués | Élevé | Exclu par l'ADR 0003. Il faudrait le rouvrir: `parent` récursif, risque de cycles. |
 | Transfert de propriété | Moyen | Aujourd'hui un seul Owner. Définir le terme dans le glossaire. |

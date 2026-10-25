@@ -9,11 +9,12 @@ import { EmptyState } from "@/components/features/empty-state";
 import { InlineRenameTitle } from "@/components/features/inline-rename-title";
 import { NewDocumentButton } from "@/components/features/new-document-button";
 import { RoleBadge } from "@/components/features/role-badge";
+import { ActivitySection } from "@/components/features/activity-section";
 import { ShareLinksSection } from "@/components/features/share-links-section";
 import { SharingSheet } from "@/components/features/sharing-sheet";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { PageShell } from "@/components/layout/page-shell";
-import { ApiError, apiGet, folderViewSchema, shareLinkEntrySchema, shareSchema, teamSchema } from "@/lib/api";
+import { ApiError, activitySchema, apiGet, folderViewSchema, shareLinkEntrySchema, shareSchema, teamSchema } from "@/lib/api";
 import {
   createFolderShareLink,
   deleteFolder,
@@ -42,11 +43,12 @@ export default async function FolderPage({ params }: PageProps<"/folders/[id]">)
 
   const canEdit = folder.access === "owner" || folder.access === "editor";
   const isOwner = folder.access === "owner";
-  const [shares, teams, access, links] = await Promise.all([
+  const [shares, teams, access, links, activity] = await Promise.all([
     isOwner ? apiGet(`/folders/${id}/shares`, z.array(shareSchema)) : [],
     isOwner ? apiGet("/teams", z.array(teamSchema)) : [],
     isOwner ? apiGet(`/folders/${id}/access`, z.array(z.string())) : [],
     isOwner ? apiGet(`/folders/${id}/share-links`, z.array(shareLinkEntrySchema)) : [],
+    isOwner ? apiGet(`/folders/${id}/activity`, activitySchema) : { entries: [], more: false },
   ]);
 
   return (
@@ -84,6 +86,7 @@ export default async function FolderPage({ params }: PageProps<"/folders/[id]">)
                 onCreate={createFolderShareLink.bind(null, id)}
                 onRevoke={revokeFolderShareLink.bind(null, id)}
               />
+              <ActivitySection activity={activity} />
             </SharingSheet>
           )}
         </div>

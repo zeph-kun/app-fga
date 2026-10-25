@@ -9,12 +9,14 @@ import { DocumentEditor } from "@/components/features/document-editor";
 import { ExpiryLabel } from "@/components/features/expiry-label";
 import { MoveDocument } from "@/components/features/move-document";
 import { RoleBadge } from "@/components/features/role-badge";
+import { ActivitySection } from "@/components/features/activity-section";
 import { ShareLinksSection } from "@/components/features/share-links-section";
 import { SharingSheet } from "@/components/features/sharing-sheet";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { PageShell } from "@/components/layout/page-shell";
 import {
   ApiError,
+  activitySchema,
   apiGet,
   commentSchema,
   documentViewSchema,
@@ -57,7 +59,7 @@ export default async function DocumentPage({ params, searchParams }: PageProps<"
   const canEdit = doc.access === "owner" || doc.access === "editor";
   const canComment = canEdit || doc.access === "commenter";
   const isOwner = doc.access === "owner";
-  const [comments, me, shares, folders, teams, access, links] = await Promise.all([
+  const [comments, me, shares, folders, teams, access, links, activity] = await Promise.all([
     apiGet(`/documents/${id}/comments`, z.array(commentSchema)),
     apiGet("/me", meSchema),
     isOwner ? apiGet(`/documents/${id}/shares`, z.array(shareSchema)) : [],
@@ -65,6 +67,7 @@ export default async function DocumentPage({ params, searchParams }: PageProps<"
     isOwner ? apiGet("/teams", z.array(teamSchema)) : [],
     isOwner ? apiGet(`/documents/${id}/access`, z.array(z.string())) : [],
     isOwner ? apiGet(`/documents/${id}/share-links`, z.array(shareLinkEntrySchema)) : [],
+    isOwner ? apiGet(`/documents/${id}/activity`, activitySchema) : { entries: [], more: false },
   ]);
   const currentFolder = folders.find((folder) => folder.id === doc.folderId);
   const movable = folders.filter((folder) => folder.access === "owner" || folder.access === "editor");
@@ -113,6 +116,7 @@ export default async function DocumentPage({ params, searchParams }: PageProps<"
                 onCreate={createDocumentShareLink.bind(null, id)}
                 onRevoke={revokeDocumentShareLink.bind(null, id)}
               />
+              <ActivitySection activity={activity} />
             </SharingSheet>
           </div>
         )}

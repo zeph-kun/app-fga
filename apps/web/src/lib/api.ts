@@ -54,6 +54,28 @@ export const shareLinkPreviewSchema = z.object({
 
 export const joinedResourceSchema = z.object({ type: z.enum(["document", "folder"]), id: z.string() });
 
+const activityRole = z.enum(["editor", "commenter", "viewer"]);
+const activitySubject = z.object({ type: z.enum(["user", "team"]), id: z.string(), name: z.string() });
+const activityFolder = z.object({ id: z.string(), name: z.string() }).nullable();
+
+/** One change to who has access to a Document or Folder, as the Owner reads it in the Activity log. */
+export const activityEventSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("shared"), subject: activitySubject, role: activityRole, expiresAt: z.coerce.date().optional() }),
+  z.object({ kind: z.literal("unshared"), subject: activitySubject }),
+  z.object({ kind: z.literal("link-created"), role: activityRole, tokenSuffix: z.string(), expiresAt: z.coerce.date().optional() }),
+  z.object({ kind: z.literal("link-revoked"), role: activityRole, tokenSuffix: z.string(), expiresAt: z.coerce.date().optional() }),
+  z.object({ kind: z.literal("link-accepted"), role: activityRole, tokenSuffix: z.string() }),
+  z.object({ kind: z.literal("moved"), from: activityFolder, to: activityFolder }),
+]);
+
+export const activitySchema = z.object({
+  entries: z.array(
+    z.object({ id: z.string(), actorId: z.string(), at: z.coerce.date(), event: activityEventSchema }),
+  ),
+  /** True when there are older entries than the ones listed. */
+  more: z.boolean(),
+});
+
 export const meSchema = z.object({
   id: z.string(),
   /** Only Managers may create Teams. */
@@ -101,6 +123,8 @@ export type DocumentView = z.infer<typeof documentViewSchema>;
 export type Subject = z.infer<typeof subjectSchema>;
 export type Share = z.infer<typeof shareSchema>;
 export type ShareLinkEntry = z.infer<typeof shareLinkEntrySchema>;
+export type Activity = z.infer<typeof activitySchema>;
+export type ActivityEvent = z.infer<typeof activityEventSchema>;
 export type ShareLinkPreview = z.infer<typeof shareLinkPreviewSchema>;
 export type Comment = z.infer<typeof commentSchema>;
 export type Team = z.infer<typeof teamSchema>;
