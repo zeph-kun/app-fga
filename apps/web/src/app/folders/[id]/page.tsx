@@ -7,6 +7,7 @@ import { ConfirmDelete } from "@/components/features/confirm-delete";
 import { CreateDialog } from "@/components/features/create-dialog";
 import { DocumentList } from "@/components/features/document-list";
 import { EmptyState } from "@/components/features/empty-state";
+import { FolderDropStrip } from "@/components/features/folder-drop-strip";
 import { FolderGrid } from "@/components/features/folder-grid";
 import { InlineRenameTitle } from "@/components/features/inline-rename-title";
 import { MoveToFolder } from "@/components/features/move-to-folder";
@@ -23,6 +24,7 @@ import {
   apiGet,
   folderSummarySchema,
   folderViewSchema,
+  meSchema,
   shareLinkEntrySchema,
   shareSchema,
   teamSchema,
@@ -60,8 +62,9 @@ export default async function FolderPage({ params }: PageProps<"/folders/[id]">)
 
   const canEdit = folder.access === "owner" || folder.access === "editor";
   const isOwner = folder.access === "owner";
-  const [allFolders, shares, teams, access, links, activity] = await Promise.all([
+  const [allFolders, me, shares, teams, access, links, activity] = await Promise.all([
     apiGet("/folders", z.array(folderSummarySchema)),
+    apiGet("/me", meSchema),
     isOwner ? apiGet(`/folders/${id}/shares`, z.array(shareSchema)) : [],
     isOwner ? apiGet("/teams", z.array(teamSchema)) : [],
     isOwner ? apiGet(`/folders/${id}/access`, z.array(z.string())) : [],
@@ -72,6 +75,15 @@ export default async function FolderPage({ params }: PageProps<"/folders/[id]">)
   const accessOf = new Map(allFolders.map((summary) => [summary.id, summary.access]));
   const subfolders = folder.folders.map((child) => ({ ...child, access: accessOf.get(child.id) ?? "viewer" }));
   const targets = moveTargets(allFolders, id).filter((target) => target.access === "owner" || target.access === "editor");
+  // The Owner of a Folder owns what is in it; otherwise only what the user wrote can be moved or deleted.
+  const documents = folder.documents.map((doc) => ({ ...doc, owned: isOwner || doc.ownerId === me.id }));
+  // Where a document of this page can be dropped: the Folder above (or the top) and the Folders at its level.
+  const editable = (folderId: string) => ["owner", "editor"].includes(accessOf.get(folderId) ?? "");
+  const above = folder.parentId === null ? [{ id: null, name: "Top level" }] : allFolders.filter((f) => f.id === folder.parentId && editable(f.id));
+  const dropTargets = [
+    ...above,
+    ...allFolders.filter((f) => f.parentId === folder.parentId && f.id !== id && editable(f.id)).sort((a, b) => a.name.localeCompare(b.name)),
+  ].map((target) => ({ id: target.id, name: target.name }));
 
   return (
     <PageShell>
@@ -167,6 +179,7 @@ export default async function FolderPage({ params }: PageProps<"/folders/[id]">)
         <h2 id="folder-documents" className="text-lg font-semibold tracking-tight">
           Documents
         </h2>
+        {documents.some((doc) => doc.owned) && <FolderDropStrip targets={dropTargets} onMoveDocument={moveDocument} />}
         {folder.documents.length === 0 ? (
           <EmptyState
             icon={FileText}
@@ -178,10 +191,7 @@ export default async function FolderPage({ params }: PageProps<"/folders/[id]">)
             }
           />
         ) : (
-          <DocumentList
-            documents={folder.documents.map((doc) => ({ ...doc, deletable: isOwner }))}
-            onDelete={deleteDocumentFromList}
-          />
+          <DocumentList documents={documents} movable onDelete={deleteDocumentFromList} />
         )}
       </section>
 

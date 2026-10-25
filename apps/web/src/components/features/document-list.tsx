@@ -16,14 +16,17 @@ interface Item {
   readonly folderId: string | null;
   readonly access?: Role;
   readonly accessExpiresAt?: Date;
-  /** Shows the delete icon (with `onDelete`): the caller knows who may delete. */
-  readonly deletable?: boolean;
+  /**
+   * Whether the user owns it, and so may move it (drag) and delete it. When the caller does not know
+   * (a list of Documents that come with their `access`), the access tells.
+   */
+  readonly owned?: boolean;
 }
 
 /**
  * Documents as a list of links. `folderNames` adds the folder to the subtitle when it is known;
  * `movable` lets the Owner drag a row onto a `DocumentDropTarget`; `onDelete` adds a delete icon to the
- * rows marked `deletable`.
+ * rows the user owns.
  */
 export function DocumentList({
   documents,
@@ -40,6 +43,7 @@ export function DocumentList({
     <ul className="divide-y overflow-hidden rounded-xl border bg-card">
       {documents.map((doc) => {
         const folder = doc.folderId ? folderNames?.get(doc.folderId) : undefined;
+        const owned = doc.owned ?? doc.access === "owner";
         return (
           <li
             key={doc.id}
@@ -47,7 +51,7 @@ export function DocumentList({
           >
             <Link
               href={`/documents/${doc.id}`}
-              onDragStart={movable && doc.access === "owner" ? (event) => startDocumentDrag(event, doc) : (event) => event.preventDefault()}
+              onDragStart={movable && owned ? (event) => startDocumentDrag(event, doc) : (event) => event.preventDefault()}
               className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset"
             >
               <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
@@ -67,7 +71,7 @@ export function DocumentList({
               </span>
               {doc.access && <RoleBadge role={doc.access} />}
             </Link>
-            {onDelete && doc.deletable && (
+            {onDelete && owned && (
               <span className="pr-3">
                 <ConfirmDelete
                   size="icon-sm"

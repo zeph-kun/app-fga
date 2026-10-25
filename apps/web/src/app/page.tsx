@@ -80,7 +80,7 @@ export default async function Home() {
               className="pb-8"
             >
               <DocumentList
-                documents={documents.map((doc) => ({ ...doc, deletable: doc.access === "owner" }))}
+                documents={documents}
                 folderNames={folderNames}
                 movable
                 onDelete={deleteDocumentFromList}

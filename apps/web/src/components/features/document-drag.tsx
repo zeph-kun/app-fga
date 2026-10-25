@@ -29,7 +29,7 @@ export function DocumentDropTarget({
   folderId: string | null;
   /** For a folder the user cannot edit. */
   disabled?: boolean;
-  /** Shown over the target while a document is dragged above it. */
+  /** Shown over the target while a document is dragged above it; empty for a target too small for it. */
   hint: string;
   onMove: (documentId: string, folderId: string | null) => Promise<ActionState>;
   className?: string;
@@ -72,7 +72,7 @@ export function DocumentDropTarget({
       className={cn("relative rounded-xl transition-shadow", over && "ring-2 ring-ring", className)}
     >
       {children}
-      {over && (
+      {over && hint && (
         <span className="pointer-events-none absolute inset-x-0 bottom-2 mx-auto w-fit rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground shadow">
           {hint}
         </span>
