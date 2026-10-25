@@ -12,6 +12,7 @@ export class InMemoryActivityLogRepository extends ActivityLogRepository {
 
   override findByResource({ type, id }: ActivityEntry['resource'], limit: number): Promise<ActivityEntry[]> {
     const found = this.entries.filter((e) => e.resource.type === type && e.resource.id === id);
-    return Promise.resolve(found.sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, limit));
+    // Reversed first, so that entries of the same instant come out newest-added first.
+    return Promise.resolve(found.reverse().sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, limit));
   }
 }

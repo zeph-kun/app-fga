@@ -2,6 +2,8 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ThrottlerModule } from '@nestjs/throttler';
 import request from 'supertest';
+import { ActivityLog } from '../activity-log/activity-log.js';
+import { InMemoryActivityLogRepository } from '../activity-log/in-memory-activity-log-repository.js';
 import { AccessTokenVerifier } from '../auth/access-token-verifier.js';
 import { Authorizer, documentRef, folderRef, userSubject } from '../authorization/authorizer.js';
 import { InMemoryAuthorizer } from '../authorization/in-memory-authorizer.js';
@@ -38,6 +40,7 @@ async function startApp(env: Record<string, string> = {}): Promise<INestApplicat
     controllers: [ShareLinksController],
     providers: [
       ShareLinks,
+      { provide: ActivityLog, useValue: new ActivityLog(authorizer, new InMemoryActivityLogRepository()) },
       { provide: ENV, useValue: loadEnv(env) },
       { provide: AccessTokenVerifier, useValue: { verify: (token: string) => Promise.resolve({ id: token }) } },
       { provide: Authorizer, useValue: authorizer },

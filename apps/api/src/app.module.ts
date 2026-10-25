@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ActivityLogModule } from './activity-log/activity-log.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { AuthorizationModule } from './authorization/authorization.module.js';
 import { CommentsModule } from './comments/comments.module.js';
@@ -14,6 +15,7 @@ import { UsersModule } from './users/users.module.js';
 
 @Module({
   imports: [
+    ActivityLogModule,
     AuthModule,
     AuthorizationModule,
     CommentsModule,

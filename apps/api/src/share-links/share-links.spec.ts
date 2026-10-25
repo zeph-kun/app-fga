@@ -1,3 +1,5 @@
+import { ActivityLog } from '../activity-log/activity-log.js';
+import { InMemoryActivityLogRepository } from '../activity-log/in-memory-activity-log-repository.js';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { documentRef, folderRef, userSubject } from '../authorization/authorizer.js';
 import { InMemoryAuthorizer } from '../authorization/in-memory-authorizer.js';
@@ -28,8 +30,9 @@ async function setup() {
   await lifecycle.createDocument(document);
   await lifecycle.createFolder(folder);
   const sharing = new Sharing(authorizer, new InMemoryUserDirectory(['alice', 'bob', 'carol', 'dave']), teams);
-  const shareLinks = new ShareLinks(authorizer, documents, folders, new InMemoryShareLinkRepository(), sharing);
-  return { authorizer, lifecycle, sharing, shareLinks };
+  const activity = new ActivityLog(authorizer, new InMemoryActivityLogRepository());
+  const shareLinks = new ShareLinks(authorizer, documents, folders, new InMemoryShareLinkRepository(), sharing, activity);
+  return { authorizer, lifecycle, sharing, shareLinks, activity };
 }
 
 afterEach(() => {
@@ -257,6 +260,54 @@ describe('ShareLinks', () => {
         await expect(shareLinks.preview(token)).rejects.toBeInstanceOf(NotFoundException);
       }
       expect(await authorizer.can('bob', 'can_view', documentRef(document.id))).toBe(false);
+    });
+  });
+
+  describe('recording in the Activity log', () => {
+    const events = async (activity: ActivityLog, resource: typeof doc | { type: 'folder'; id: string } = doc) =>
+      (await activity.forResource('alice', resource)).entries.map((e) => ({ actor: e.actorId, ...e.event }));
+
+    it('notes a link created and a link revoked, by its last characters', async () => {
+      const { shareLinks, activity } = await setup();
+      const { token } = await shareLinks.create('alice', doc, { role: 'commenter', expiresInHours: 3 });
+      const [link] = await shareLinks.list('alice', doc);
+
+      await shareLinks.revoke('alice', doc, link?.id ?? '');
+
+      expect(await events(activity)).toEqual([
+        { actor: 'alice', kind: 'link-revoked', role: 'commenter', tokenSuffix: token.slice(-4), expiresAt: link?.expiresAt },
+        { actor: 'alice', kind: 'link-created', role: 'commenter', tokenSuffix: token.slice(-4), expiresAt: link?.expiresAt },
+      ]);
+    });
+
+    it('notes an accepted link once, by the User who accepted it, and not as a Share', async () => {
+      const { shareLinks, activity } = await setup();
+      const { token } = await shareLinks.create('alice', doc, { role: 'editor' });
+
+      await shareLinks.redeem('bob', token);
+
+      expect(await events(activity)).toEqual([
+        { actor: 'bob', kind: 'link-accepted', role: 'editor', tokenSuffix: token.slice(-4) },
+        expect.objectContaining({ actor: 'alice', kind: 'link-created' }),
+      ]);
+    });
+
+    it('notes nothing when accepting gives nothing', async () => {
+      const { shareLinks, activity } = await setup();
+      const { token } = await shareLinks.create('alice', doc, { role: 'viewer' });
+
+      await shareLinks.redeem('alice', token);
+
+      expect(await events(activity)).toEqual([expect.objectContaining({ kind: 'link-created' })]);
+    });
+
+    it('notes the links of a Folder on the Folder', async () => {
+      const { shareLinks, activity } = await setup();
+      const folderResource = { type: 'folder', id: folder.id } as const;
+      await shareLinks.create('alice', folderResource, { role: 'viewer' });
+
+      expect(await events(activity, folderResource)).toEqual([expect.objectContaining({ kind: 'link-created' })]);
+      expect(await events(activity)).toEqual([]);
     });
   });
 });

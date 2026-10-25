@@ -1,3 +1,5 @@
+import { ActivityLog } from '../activity-log/activity-log.js';
+import { InMemoryActivityLogRepository } from '../activity-log/in-memory-activity-log-repository.js';
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { folderRef, teamSubject, userSubject } from '../authorization/authorizer.js';
 import { InMemoryAuthorizer } from '../authorization/in-memory-authorizer.js';
@@ -19,16 +21,19 @@ function setup() {
   const folders = new InMemoryFolderRepository();
   const users = new InMemoryUserDirectory(['alice', 'bob', 'carol']);
   const teams = new InMemoryTeamRepository();
+  const activity = new ActivityLog(authorizer, new InMemoryActivityLogRepository());
   return {
     authorizer,
     documents,
     folders,
+    activity,
     service: new FoldersService(
       authorizer,
       folders,
       documents,
       new Sharing(authorizer, users, teams),
       new ResourceLifecycle(authorizer, documents, folders, teams, membership),
+      activity,
     ),
     teams: new TeamsService(
       authorizer,
@@ -199,6 +204,34 @@ describe('FoldersService', () => {
       await service.share('alice', folder.id, { subject: teamSubject(team.id), role: 'viewer' });
 
       expect(await service.accessList('alice', folder.id)).toEqual(expect.arrayContaining(['alice', 'bob']));
+    });
+  });
+
+  describe('recording in the Activity log', () => {
+    it('notes who shared the folder with whom, and who was removed', async () => {
+      const { service, activity } = setup();
+      const folder = await service.create('alice', { name: 'Projects' });
+
+      await service.share('alice', folder.id, { subject: userSubject('bob'), role: 'viewer' });
+      await service.unshare('alice', folder.id, userSubject('bob'));
+
+      const { entries } = await activity.forResource('alice', { type: 'folder', id: folder.id });
+      expect(entries.map((e) => e.event)).toEqual([
+        { kind: 'unshared', subject: { type: 'user', id: 'bob', name: 'bob' } },
+        { kind: 'shared', subject: { type: 'user', id: 'bob', name: 'bob' }, role: 'viewer' },
+      ]);
+      expect(entries.every((e) => e.actorId === 'alice')).toBe(true);
+    });
+
+    it('notes nothing for a share that was refused', async () => {
+      const { service, activity } = setup();
+      const folder = await service.create('alice', { name: 'Projects' });
+
+      await expect(service.share('alice', folder.id, { subject: userSubject('alice'), role: 'viewer' })).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+
+      expect((await activity.forResource('alice', { type: 'folder', id: folder.id })).entries).toEqual([]);
     });
   });
 });

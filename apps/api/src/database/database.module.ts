@@ -1,4 +1,6 @@
 import { Global, Module } from '@nestjs/common';
+import { ActivityLogRepository } from '../activity-log/activity-log-repository.js';
+import { PrismaActivityLogRepository } from '../activity-log/prisma-activity-log-repository.js';
 import { CommentRepository } from '../comments/comment-repository.js';
 import { PrismaCommentRepository } from '../comments/prisma-comment-repository.js';
 import { DocumentRepository } from '../documents/document-repository.js';
@@ -18,6 +20,11 @@ import { PrismaService } from './prisma.service.js';
     {
       provide: DocumentRepository,
       useFactory: (prisma: PrismaService) => new PrismaDocumentRepository(prisma),
+      inject: [PrismaService],
+    },
+    {
+      provide: ActivityLogRepository,
+      useFactory: (prisma: PrismaService) => new PrismaActivityLogRepository(prisma),
       inject: [PrismaService],
     },
     {
@@ -41,6 +48,6 @@ import { PrismaService } from './prisma.service.js';
       inject: [PrismaService],
     },
   ],
-  exports: [CommentRepository, DocumentRepository, FolderRepository, ShareLinkRepository, TeamRepository],
+  exports: [ActivityLogRepository, CommentRepository, DocumentRepository, FolderRepository, ShareLinkRepository, TeamRepository],
 })
 export class DatabaseModule {}

@@ -1,3 +1,4 @@
+import { ActivityLog } from '../activity-log/activity-log.js';
 import { randomUUID } from 'node:crypto';
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Authorizer, type RolePermission, type Role, folderRef } from '../authorization/authorizer.js';
@@ -36,6 +37,7 @@ export class FoldersService {
     private readonly documents: DocumentRepository,
     private readonly sharing: Sharing,
     private readonly lifecycle: ResourceLifecycle,
+    private readonly activity: ActivityLog,
   ) {}
 
   async create(userId: string, input: CreateFolderInput): Promise<Folder> {
@@ -77,7 +79,13 @@ export class FoldersService {
 
   async share(userId: string, id: string, input: ShareInput): Promise<void> {
     const folder = await this.require(userId, 'can_share', id);
-    await this.sharing.share(folderRef(id), folder.ownerId, input);
+    const { subject, name, role, expiresAt } = await this.sharing.share(folderRef(id), folder.ownerId, input);
+    await this.activity.record(userId, { type: 'folder', id }, {
+      kind: 'shared',
+      subject: { type: subject.type, id: subject.id, name },
+      role,
+      ...(expiresAt && { expiresAt }),
+    });
   }
 
   async shares(userId: string, id: string): Promise<ShareEntry[]> {
@@ -87,7 +95,11 @@ export class FoldersService {
 
   async unshare(userId: string, id: string, subject: ShareInput['subject']): Promise<void> {
     const folder = await this.require(userId, 'can_share', id);
-    await this.sharing.unshare(folderRef(id), folder.ownerId, subject);
+    const name = await this.sharing.unshare(folderRef(id), folder.ownerId, subject);
+    await this.activity.record(userId, { type: 'folder', id }, {
+      kind: 'unshared',
+      subject: { type: subject.type, id: subject.id, name },
+    });
   }
 
   /** Every user who can view this folder, Teams and membership resolved — for an access review. */

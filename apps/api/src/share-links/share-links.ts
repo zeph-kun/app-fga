@@ -1,3 +1,4 @@
+import { ActivityLog } from '../activity-log/activity-log.js';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Authorizer, type Role, type SharedRole, documentRef, folderRef, userSubject } from '../authorization/authorizer.js';
@@ -43,13 +44,14 @@ export class ShareLinks {
     private readonly folders: FolderRepository,
     private readonly links: ShareLinkRepository,
     private readonly sharing: Sharing,
+    private readonly activity: ActivityLog,
   ) {}
 
   /** Returns the token, which is not stored and cannot be read again. */
   async create(userId: string, resource: LinkedResource, input: ShareLinkInput): Promise<{ token: string }> {
     await this.requireShareable(userId, resource);
     const token = randomBytes(32).toString('base64url');
-    await this.links.save({
+    const link: ShareLink = {
       id: randomUUID(),
       resource,
       role: input.role,
@@ -58,6 +60,13 @@ export class ShareLinks {
       createdBy: userId,
       createdAt: new Date(),
       ...(input.expiresInHours !== undefined && { expiresAt: new Date(Date.now() + input.expiresInHours * 3_600_000) }),
+    };
+    await this.links.save(link);
+    await this.activity.record(userId, resource, {
+      kind: 'link-created',
+      role: link.role,
+      tokenSuffix: link.tokenSuffix,
+      ...(link.expiresAt && { expiresAt: link.expiresAt }),
     });
     return { token };
   }
@@ -82,6 +91,12 @@ export class ShareLinks {
     const link = await this.links.findById(linkId);
     if (link?.resource.type !== resource.type || link.resource.id !== resource.id) throw new NotFoundException();
     await this.links.delete(linkId);
+    await this.activity.record(userId, resource, {
+      kind: 'link-revoked',
+      role: link.role,
+      tokenSuffix: link.tokenSuffix,
+      ...(link.expiresAt && { expiresAt: link.expiresAt }),
+    });
   }
 
   /** What the link is for, without giving anything. 404 for a link that is unknown, expired or revoked. */
@@ -105,6 +120,12 @@ export class ShareLinks {
       subject: userSubject(userId),
       role: link.role,
       expiresAt: link.expiresAt,
+    });
+    // Not recorded as a Share: that would note the same acceptance twice.
+    await this.activity.record(userId, link.resource, {
+      kind: 'link-accepted',
+      role: link.role,
+      tokenSuffix: link.tokenSuffix,
     });
     return link.resource;
   }

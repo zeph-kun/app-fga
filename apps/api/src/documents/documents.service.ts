@@ -1,3 +1,4 @@
+import { ActivityLog } from '../activity-log/activity-log.js';
 import { randomUUID } from 'node:crypto';
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Authorizer, type RolePermission, type Role, documentRef, folderRef } from '../authorization/authorizer.js';
@@ -40,6 +41,7 @@ export class DocumentsService {
     private readonly folders: FolderRepository,
     private readonly sharing: Sharing,
     private readonly lifecycle: ResourceLifecycle,
+    private readonly activity: ActivityLog,
   ) {}
 
   async create(userId: string, { folderId = null, ...input }: CreateDocumentInput): Promise<Document> {
@@ -93,7 +95,18 @@ export class DocumentsService {
   async move(userId: string, id: string, folderId: string | null): Promise<Document> {
     const current = await this.require(userId, 'can_share', id);
     if (folderId !== null) await this.requireFolder(userId, 'can_edit', folderId);
-    return this.lifecycle.moveDocument(current, folderId);
+    const moved = await this.lifecycle.moveDocument(current, folderId);
+    await this.activity.record(userId, { type: 'document', id }, {
+      kind: 'moved',
+      from: await this.folderNamed(current.folderId),
+      to: await this.folderNamed(folderId),
+    });
+    return moved;
+  }
+
+  private async folderNamed(id: string | null): Promise<{ id: string; name: string } | null> {
+    const folder = id === null ? undefined : await this.folders.findById(id);
+    return folder ? { id: folder.id, name: folder.name } : null;
   }
 
   async remove(userId: string, id: string): Promise<void> {
@@ -103,7 +116,13 @@ export class DocumentsService {
 
   async share(userId: string, id: string, input: ShareInput): Promise<void> {
     const document = await this.require(userId, 'can_share', id);
-    await this.sharing.share(documentRef(id), document.ownerId, input);
+    const { subject, name, role, expiresAt } = await this.sharing.share(documentRef(id), document.ownerId, input);
+    await this.activity.record(userId, { type: 'document', id }, {
+      kind: 'shared',
+      subject: { type: subject.type, id: subject.id, name },
+      role,
+      ...(expiresAt && { expiresAt }),
+    });
   }
 
   async shares(userId: string, id: string): Promise<ShareEntry[]> {
@@ -113,7 +132,11 @@ export class DocumentsService {
 
   async unshare(userId: string, id: string, subject: ShareInput['subject']): Promise<void> {
     const document = await this.require(userId, 'can_share', id);
-    await this.sharing.unshare(documentRef(id), document.ownerId, subject);
+    const name = await this.sharing.unshare(documentRef(id), document.ownerId, subject);
+    await this.activity.record(userId, { type: 'document', id }, {
+      kind: 'unshared',
+      subject: { type: subject.type, id: subject.id, name },
+    });
   }
 
   /** Every user who can view this document, Teams and folder inheritance resolved — for an access review. */

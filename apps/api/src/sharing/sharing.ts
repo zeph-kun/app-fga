@@ -64,13 +64,20 @@ export class Sharing {
     private readonly teams: TeamRepository,
   ) {}
 
-  async share(resource: Resource, ownerId: string, { subject, role, expiresInHours, expiresAt }: ShareInput): Promise<void> {
+  /** Answers with the Share as `shares` will list it. */
+  async share(
+    resource: Resource,
+    ownerId: string,
+    { subject, role, expiresInHours, expiresAt }: ShareInput,
+  ): Promise<ShareEntry> {
     if (subject.type === 'user' && subject.id === ownerId) {
       throw new ForbiddenException('The owner already has full access');
     }
     await requireSubjectExists(subject, this.users, this.teams);
     for (const other of SHARED_ROLES.filter((r) => r !== role)) await this.authorizer.revoke(subject, other, resource);
-    await this.authorizer.grant(subject, role, resource, expiresAt ?? expiresAtFrom(expiresInHours));
+    const ends = expiresAt ?? expiresAtFrom(expiresInHours);
+    await this.authorizer.grant(subject, role, resource, ends);
+    return { subject, name: await nameOfSubject(subject, this.teams), role, ...(ends && { expiresAt: ends }) };
   }
 
   async shares(resource: Resource): Promise<ShareEntry[]> {
@@ -82,12 +89,13 @@ export class Sharing {
     );
   }
 
-  /** Removes the Grant of `subject` whatever its role. */
-  async unshare(resource: Resource, ownerId: string, subject: Subject): Promise<void> {
+  /** Removes the Grant of `subject` whatever its role. Answers with the name `shares` listed it by. */
+  async unshare(resource: Resource, ownerId: string, subject: Subject): Promise<string> {
     if (subject.type === 'user' && subject.id === ownerId) {
       throw new ForbiddenException('The owner cannot be removed');
     }
     for (const role of SHARED_ROLES) await this.authorizer.revoke(subject, role, resource);
+    return nameOfSubject(subject, this.teams);
   }
 
   /** Every User who can view `resource`, Teams and folder inheritance resolved — for an access review. */

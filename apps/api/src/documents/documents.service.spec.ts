@@ -1,3 +1,5 @@
+import { ActivityLog } from '../activity-log/activity-log.js';
+import { InMemoryActivityLogRepository } from '../activity-log/in-memory-activity-log-repository.js';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { type Authorizer, documentRef, teamSubject, userSubject } from '../authorization/authorizer.js';
 import { InMemoryAuthorizer } from '../authorization/in-memory-authorizer.js';
@@ -20,19 +22,23 @@ import { InMemoryDocumentRepository } from './in-memory-document-repository.js';
 const lifecycleFor = (authorizer: Authorizer, documents: DocumentRepository, folders: FolderRepository) =>
   new ResourceLifecycle(authorizer, documents, folders, new InMemoryTeamRepository(), new InMemoryMembership());
 
+const activityFor = (authorizer: Authorizer) => new ActivityLog(authorizer, new InMemoryActivityLogRepository());
+
 const documentsService = (
   authorizer: Authorizer,
   documents: DocumentRepository,
   folders: FolderRepository,
   sharing: Sharing,
-) => new DocumentsService(authorizer, documents, folders, sharing, lifecycleFor(authorizer, documents, folders));
+  activity = activityFor(authorizer),
+) => new DocumentsService(authorizer, documents, folders, sharing, lifecycleFor(authorizer, documents, folders), activity);
 
 const foldersService = (
   authorizer: Authorizer,
   folders: FolderRepository,
   documents: DocumentRepository,
   sharing: Sharing,
-) => new FoldersService(authorizer, folders, documents, sharing, lifecycleFor(authorizer, documents, folders));
+  activity = activityFor(authorizer),
+) => new FoldersService(authorizer, folders, documents, sharing, lifecycleFor(authorizer, documents, folders), activity);
 
 /** Documents, Folders and Teams wired to the same storage and Authorizer, as in the app. */
 function setupWithFolders() {
@@ -42,10 +48,12 @@ function setupWithFolders() {
   const folders = new InMemoryFolderRepository();
   const users = new InMemoryUserDirectory(['alice', 'bob', 'carol']);
   const teams = new InMemoryTeamRepository();
+  const activity = activityFor(authorizer);
   return {
     authorizer,
-    documents: documentsService(authorizer, documents, folders, new Sharing(authorizer, users, teams)),
-    folders: foldersService(authorizer, folders, documents, new Sharing(authorizer, users, teams)),
+    activity,
+    documents: documentsService(authorizer, documents, folders, new Sharing(authorizer, users, teams), activity),
+    folders: foldersService(authorizer, folders, documents, new Sharing(authorizer, users, teams), activity),
     teams: new TeamsService(
       authorizer,
       membership,
@@ -435,6 +443,74 @@ describe('DocumentsService', () => {
       const doc = await documents.create('alice', { title: 'Plan', content: '' });
 
       await expect(documents.accessList('bob', doc.id)).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('recording in the Activity log', () => {
+    it('notes who shared the document with whom, for how long, and who was removed', async () => {
+      const { documents, activity } = setupWithFolders();
+      const doc = await documents.create('alice', { title: 'Plan', content: '' });
+      const resource = { type: 'document', id: doc.id } as const;
+
+      await documents.share('alice', doc.id, { subject: userSubject('bob'), role: 'editor', expiresInHours: 2 });
+      await documents.unshare('alice', doc.id, userSubject('bob'));
+
+      const { entries } = await activity.forResource('alice', resource);
+      expect(entries.map((e) => [e.actorId, e.event.kind])).toEqual([
+        ['alice', 'unshared'],
+        ['alice', 'shared'],
+      ]);
+      expect(entries[0]?.event).toEqual({ kind: 'unshared', subject: { type: 'user', id: 'bob', name: 'bob' } });
+      expect(entries[1]?.event).toMatchObject({
+        kind: 'shared',
+        subject: { type: 'user', id: 'bob', name: 'bob' },
+        role: 'editor',
+        expiresAt: expect.any(Date),
+      });
+    });
+
+    it('keeps the name a Team had when it was shared with, even once renamed', async () => {
+      const { documents, teams, activity } = setupWithFolders();
+      const team = await teams.create('alice', { name: 'Reviewers' });
+      const doc = await documents.create('alice', { title: 'Plan', content: '' });
+      await documents.share('alice', doc.id, { subject: teamSubject(team.id), role: 'viewer' });
+
+      await teams.rename('alice', team.id, { name: 'Editors' });
+
+      const { entries } = await activity.forResource('alice', { type: 'document', id: doc.id });
+      expect(entries[0]?.event).toMatchObject({ subject: { type: 'team', id: team.id, name: 'Reviewers' } });
+    });
+
+    it('notes a Move with the names of the Folders it leaves and enters', async () => {
+      const { documents, folders, activity } = setupWithFolders();
+      const folder = await folders.create('alice', { name: 'Projects' });
+      const doc = await documents.create('alice', { title: 'Plan', content: '' });
+
+      await documents.move('alice', doc.id, folder.id);
+      await documents.move('alice', doc.id, null);
+
+      const { entries } = await activity.forResource('alice', { type: 'document', id: doc.id });
+      expect(entries.map((e) => e.event)).toEqual([
+        { kind: 'moved', from: { id: folder.id, name: 'Projects' }, to: null },
+        { kind: 'moved', from: null, to: { id: folder.id, name: 'Projects' } },
+      ]);
+    });
+
+    it('notes nothing for a change that was refused', async () => {
+      const { documents, activity } = setupWithFolders();
+      const doc = await documents.create('alice', { title: 'Plan', content: '' });
+      await documents.share('alice', doc.id, { subject: userSubject('bob'), role: 'viewer' });
+      const resource = { type: 'document', id: doc.id } as const;
+      const before = (await activity.forResource('alice', resource)).entries.length;
+
+      await expect(documents.share('bob', doc.id, { subject: userSubject('carol'), role: 'viewer' })).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      await expect(documents.share('alice', doc.id, { subject: userSubject('alice'), role: 'viewer' })).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+
+      expect((await activity.forResource('alice', resource)).entries).toHaveLength(before);
     });
   });
 });

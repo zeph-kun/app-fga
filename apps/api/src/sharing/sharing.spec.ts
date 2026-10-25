@@ -92,6 +92,25 @@ describe('Sharing', () => {
       expect((await sharing.shares(doc))[0]?.expiresAt).toEqual(expiresAt);
     });
 
+    it('answers with the Share it gave, named as it is listed', async () => {
+      const { teams, membership, sharing } = await setup();
+      await teams.save({ id: 't1', name: 'Design', ownerId: 'bob' });
+      await membership.add('t1', 'carol');
+      const expiresAt = new Date(Date.now() + 5 * 3_600_000);
+
+      expect(await sharing.share(doc, 'alice', { subject: userSubject('bob'), role: 'viewer' })).toEqual({
+        subject: userSubject('bob'),
+        name: 'bob',
+        role: 'viewer',
+      });
+      expect(await sharing.share(doc, 'alice', { subject: teamSubject('t1'), role: 'editor', expiresAt })).toEqual({
+        subject: teamSubject('t1'),
+        name: 'Design',
+        role: 'editor',
+        expiresAt,
+      });
+    });
+
     it('shares with a Team and lists it by the Team name', async () => {
       const { teams, authorizer, membership, sharing } = await setup();
       await teams.save({ id: 't1', name: 'Design', ownerId: 'bob' });
@@ -144,6 +163,15 @@ describe('Sharing', () => {
 
       expect(await authorizer.can('bob', 'can_view', doc)).toBe(false);
       expect(await sharing.shares(doc)).toEqual([]);
+    });
+
+    it('answers with the name of whom it removed, even when the Team no longer exists', async () => {
+      const { teams, sharing } = await setup();
+      await teams.save({ id: 't1', name: 'Design', ownerId: 'bob' });
+
+      expect(await sharing.unshare(doc, 'alice', userSubject('bob'))).toBe('bob');
+      expect(await sharing.unshare(doc, 'alice', teamSubject('t1'))).toBe('Design');
+      expect(await sharing.unshare(doc, 'alice', teamSubject('gone'))).toBe('Deleted team');
     });
 
     it('refuses to remove the Owner', async () => {
