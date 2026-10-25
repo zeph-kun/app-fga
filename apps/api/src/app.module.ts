@@ -8,6 +8,7 @@ import { ENV, type Env } from './config/env.js';
 import { DatabaseModule } from './database/database.module.js';
 import { DocumentsModule } from './documents/documents.module.js';
 import { FoldersModule } from './folders/folders.module.js';
+import { ShareLinksModule } from './share-links/share-links.module.js';
 import { TeamsModule } from './teams/teams.module.js';
 import { UsersModule } from './users/users.module.js';
 
@@ -19,6 +20,7 @@ import { UsersModule } from './users/users.module.js';
     DatabaseModule,
     DocumentsModule,
     FoldersModule,
+    ShareLinksModule,
     TeamsModule,
     UsersModule,
     ThrottlerModule.forRootAsync({

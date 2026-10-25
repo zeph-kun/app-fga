@@ -5,6 +5,8 @@ import { DocumentRepository } from '../documents/document-repository.js';
 import { PrismaDocumentRepository } from '../documents/prisma-document-repository.js';
 import { FolderRepository } from '../folders/folder-repository.js';
 import { PrismaFolderRepository } from '../folders/prisma-folder-repository.js';
+import { PrismaShareLinkRepository } from '../share-links/prisma-share-link-repository.js';
+import { ShareLinkRepository } from '../share-links/share-link-repository.js';
 import { TeamRepository } from '../teams/team-repository.js';
 import { PrismaTeamRepository } from '../teams/prisma-team-repository.js';
 import { PrismaService } from './prisma.service.js';
@@ -29,11 +31,16 @@ import { PrismaService } from './prisma.service.js';
       inject: [PrismaService],
     },
     {
+      provide: ShareLinkRepository,
+      useFactory: (prisma: PrismaService) => new PrismaShareLinkRepository(prisma),
+      inject: [PrismaService],
+    },
+    {
       provide: TeamRepository,
       useFactory: (prisma: PrismaService) => new PrismaTeamRepository(prisma),
       inject: [PrismaService],
     },
   ],
-  exports: [CommentRepository, DocumentRepository, FolderRepository, TeamRepository],
+  exports: [CommentRepository, DocumentRepository, FolderRepository, ShareLinkRepository, TeamRepository],
 })
 export class DatabaseModule {}

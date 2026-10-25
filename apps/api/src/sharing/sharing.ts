@@ -9,6 +9,8 @@ export interface ShareInput {
   readonly role: SharedRole;
   /** Omitted or absent means the Share never expires. */
   readonly expiresInHours?: number;
+  /** A moment instead of a duration (a Share link's own Expiry); wins over `expiresInHours`. */
+  readonly expiresAt?: Date;
 }
 
 /** A Share as shown to the Owner: who it is for, by name, and when (if ever) it expires. */
@@ -62,13 +64,13 @@ export class Sharing {
     private readonly teams: TeamRepository,
   ) {}
 
-  async share(resource: Resource, ownerId: string, { subject, role, expiresInHours }: ShareInput): Promise<void> {
+  async share(resource: Resource, ownerId: string, { subject, role, expiresInHours, expiresAt }: ShareInput): Promise<void> {
     if (subject.type === 'user' && subject.id === ownerId) {
       throw new ForbiddenException('The owner already has full access');
     }
     await requireSubjectExists(subject, this.users, this.teams);
     for (const other of SHARED_ROLES.filter((r) => r !== role)) await this.authorizer.revoke(subject, other, resource);
-    await this.authorizer.grant(subject, role, resource, expiresAtFrom(expiresInHours));
+    await this.authorizer.grant(subject, role, resource, expiresAt ?? expiresAtFrom(expiresInHours));
   }
 
   async shares(resource: Resource): Promise<ShareEntry[]> {

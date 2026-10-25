@@ -21,5 +21,11 @@ export const shareSchema = z.object({
   expiresInHours: z.number().positive().max(24 * 365).optional(),
 });
 
+/** The body of a Share link request: which role it gives, and for how long it works (forever, if omitted). */
+export const shareLinkSchema = z.object({
+  role: z.enum(SHARED_ROLES),
+  expiresInHours: z.number().positive().max(24 * 365).optional(),
+});
+
 /** The body of a comment: 1 to 2,000 characters once trimmed. */
 export const commentSchema = z.object({ text: z.string().trim().min(1, 'Write a comment.').max(2000, '2,000 characters at most.') });

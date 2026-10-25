@@ -83,6 +83,15 @@ describe('Sharing', () => {
       }
     });
 
+    it('makes a Grant expire at the given moment', async () => {
+      const { sharing } = await setup();
+      const expiresAt = new Date(Date.now() + 5 * 3_600_000);
+
+      await sharing.share(doc, 'alice', { subject: userSubject('bob'), role: 'viewer', expiresAt });
+
+      expect((await sharing.shares(doc))[0]?.expiresAt).toEqual(expiresAt);
+    });
+
     it('shares with a Team and lists it by the Team name', async () => {
       const { teams, authorizer, membership, sharing } = await setup();
       await teams.save({ id: 't1', name: 'Design', ownerId: 'bob' });
