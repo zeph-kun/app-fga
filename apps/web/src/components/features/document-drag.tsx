@@ -2,14 +2,12 @@
 
 import { type DragEvent, type ReactNode, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { z } from "zod";
 import { cn } from "cn";
 import type { ActionState } from "@/lib/action-state";
+import { parseDraggedDocument } from "@/lib/dragged-document";
 
 /** Marks a drag as "a document being moved", so other drags (text, files) are ignored. */
 export const DOCUMENT_DRAG_TYPE = "application/x-app-fga-document";
-
-const draggedSchema = z.object({ id: z.string().uuid(), folderId: z.string().uuid().nullable() });
 
 export function startDocumentDrag(event: DragEvent, document: { id: string; folderId: string | null }): void {
   event.dataTransfer.setData(DOCUMENT_DRAG_TYPE, JSON.stringify({ id: document.id, folderId: document.folderId }));
@@ -45,14 +43,14 @@ export function DocumentDropTarget({
     if (!accepts(event)) return;
     event.preventDefault();
     setOver(false);
-    const dragged = draggedSchema.safeParse(safeJson(event.dataTransfer.getData(DOCUMENT_DRAG_TYPE)));
-    if (!dragged.success) return;
-    if (dragged.data.folderId === folderId) {
+    const dragged = parseDraggedDocument(event.dataTransfer.getData(DOCUMENT_DRAG_TYPE));
+    if (!dragged) return;
+    if (dragged.folderId === folderId) {
       toast.info("The document is already here.");
       return;
     }
     startTransition(async () => {
-      const result = await onMove(dragged.data.id, folderId);
+      const result = await onMove(dragged.id, folderId);
       if (result.error) toast.error(result.error);
       else if (result.success) toast.success(result.success);
     });
@@ -81,12 +79,4 @@ export function DocumentDropTarget({
       )}
     </div>
   );
-}
-
-function safeJson(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
-  }
 }
