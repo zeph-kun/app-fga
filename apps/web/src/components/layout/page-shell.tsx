@@ -18,7 +18,7 @@ export async function PageShell({
 }: {
   children: ReactNode;
   currentFolderId?: string | null;
-  /** Off for a page that stands on its own, like the one a Share link opens. */
+  /** Off for a page that has no use for the Folders (Teams) or that stands on its own (the one a Share link opens). */
   sidebar?: boolean;
 }) {
   const folders = sidebar ? await apiGet("/folders", z.array(folderSummarySchema)) : [];
@@ -32,7 +32,7 @@ export async function PageShell({
       >
         Skip to content
       </a>
-      <AppHeader />
+      <AppHeader wide={sidebar} />
       <div className="mx-auto flex w-full max-w-7xl flex-1 gap-8 px-4">
         {sidebar && (
           <aside className="sticky top-14 hidden h-[calc(100vh-3.5rem)] w-60 shrink-0 overflow-y-auto py-8 lg:block">

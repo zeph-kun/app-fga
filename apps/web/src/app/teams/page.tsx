@@ -26,7 +26,7 @@ export default async function TeamsPage() {
   const [teams, me] = await Promise.all([apiGet("/teams", z.array(teamSchema)), apiGet("/me", meSchema)]);
 
   return (
-    <PageShell>
+    <PageShell sidebar={false}>
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-xl font-semibold tracking-tight">Teams</h1>

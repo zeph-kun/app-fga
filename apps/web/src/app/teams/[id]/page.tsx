@@ -27,7 +27,7 @@ export default async function TeamPage({ params }: PageProps<"/teams/[id]">) {
   const isOwner = team.role === "owner";
 
   return (
-    <PageShell>
+    <PageShell sidebar={false}>
       <Breadcrumb items={[{ label: "Teams", href: "/teams" }, { label: team.name }]} />
 
       <div className="flex items-start justify-between gap-4">
