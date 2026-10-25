@@ -34,7 +34,7 @@ Un job ou une commande `reconcile` qui détecte les documents sans grant `owner`
 | Historique de versions du contenu | Faible | Plus orienté produit que FGA. |
 | Pagination et recherche | Technique | `ListObjects` est plafonné à 1000. Combiner avec une recherche Postgres. |
 | Révocation en masse / "Shared with me" avec filtres | Faible | Bonne UX, peu de coût. |
-| Notifications d'expiration imminente | Faible | S'appuie sur `expiryOn`, déjà présent. |
+| Écarté — Notifications d'expiration imminente | Faible | Le bandeau de la page du Document (compte à rebours, puis page `access-ended`) suffit. Une cloche dans l'en-tête aurait prévenu avant d'ouvrir le Document: pas jugé utile. |
 
 ## 3. Qualité et sécurité
 
