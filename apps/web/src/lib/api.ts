@@ -32,6 +32,28 @@ export const shareSchema = z.object({
   expiresAt: z.coerce.date().optional(),
 });
 
+/** A Share link as the Owner sees it: never the token, which is shown once when the link is created. */
+export const shareLinkEntrySchema = z.object({
+  id: z.string(),
+  role: z.enum(["editor", "commenter", "viewer"]),
+  tokenSuffix: z.string(),
+  createdBy: z.string(),
+  createdAt: z.coerce.date(),
+  expiresAt: z.coerce.date().optional(),
+});
+
+export const createdShareLinkSchema = z.object({ token: z.string() });
+
+/** What someone sees before accepting a Share link. */
+export const shareLinkPreviewSchema = z.object({
+  resource: z.object({ type: z.enum(["document", "folder"]), id: z.string(), name: z.string() }),
+  role: z.enum(["editor", "commenter", "viewer"]),
+  invitedBy: z.string(),
+  expiresAt: z.coerce.date().optional(),
+});
+
+export const joinedResourceSchema = z.object({ type: z.enum(["document", "folder"]), id: z.string() });
+
 export const meSchema = z.object({
   id: z.string(),
   /** Only Managers may create Teams. */
@@ -78,6 +100,8 @@ export type FolderView = z.infer<typeof folderViewSchema>;
 export type DocumentView = z.infer<typeof documentViewSchema>;
 export type Subject = z.infer<typeof subjectSchema>;
 export type Share = z.infer<typeof shareSchema>;
+export type ShareLinkEntry = z.infer<typeof shareLinkEntrySchema>;
+export type ShareLinkPreview = z.infer<typeof shareLinkPreviewSchema>;
 export type Comment = z.infer<typeof commentSchema>;
 export type Team = z.infer<typeof teamSchema>;
 export type TeamView = z.infer<typeof teamViewSchema>;

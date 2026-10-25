@@ -9,6 +9,7 @@ import { DocumentEditor } from "@/components/features/document-editor";
 import { ExpiryLabel } from "@/components/features/expiry-label";
 import { MoveDocument } from "@/components/features/move-document";
 import { RoleBadge } from "@/components/features/role-badge";
+import { ShareLinksSection } from "@/components/features/share-links-section";
 import { SharingSheet } from "@/components/features/sharing-sheet";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { PageShell } from "@/components/layout/page-shell";
@@ -19,14 +20,17 @@ import {
   documentViewSchema,
   folderSummarySchema,
   meSchema,
+  shareLinkEntrySchema,
   shareSchema,
   teamSchema,
 } from "@/lib/api";
 import {
   addComment,
+  createDocumentShareLink,
   deleteComment,
   deleteDocument,
   moveDocument,
+  revokeDocumentShareLink,
   shareDocument,
   unshareDocument,
   updateDocument,
@@ -53,13 +57,14 @@ export default async function DocumentPage({ params, searchParams }: PageProps<"
   const canEdit = doc.access === "owner" || doc.access === "editor";
   const canComment = canEdit || doc.access === "commenter";
   const isOwner = doc.access === "owner";
-  const [comments, me, shares, folders, teams, access] = await Promise.all([
+  const [comments, me, shares, folders, teams, access, links] = await Promise.all([
     apiGet(`/documents/${id}/comments`, z.array(commentSchema)),
     apiGet("/me", meSchema),
     isOwner ? apiGet(`/documents/${id}/shares`, z.array(shareSchema)) : [],
     apiGet("/folders", z.array(folderSummarySchema)),
     isOwner ? apiGet("/teams", z.array(teamSchema)) : [],
     isOwner ? apiGet(`/documents/${id}/access`, z.array(z.string())) : [],
+    isOwner ? apiGet(`/documents/${id}/share-links`, z.array(shareLinkEntrySchema)) : [],
   ]);
   const currentFolder = folders.find((folder) => folder.id === doc.folderId);
   const movable = folders.filter((folder) => folder.access === "owner" || folder.access === "editor");
@@ -102,7 +107,13 @@ export default async function DocumentPage({ params, searchParams }: PageProps<"
                   ? "People who have access through the folder aren't listed here."
                   : undefined
               }
-            />
+            >
+              <ShareLinksSection
+                links={links}
+                onCreate={createDocumentShareLink.bind(null, id)}
+                onRevoke={revokeDocumentShareLink.bind(null, id)}
+              />
+            </SharingSheet>
           </div>
         )}
       </div>

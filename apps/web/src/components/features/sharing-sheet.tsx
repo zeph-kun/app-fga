@@ -1,7 +1,7 @@
 "use client";
 
 import { Clock, Loader2, UserPlus, Users, Users2, X } from "lucide-react";
-import { useState, useTransition } from "react";
+import { type ReactNode, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -19,23 +19,9 @@ import type { ActionState } from "@/lib/action-state";
 import type { Share, Subject, Team } from "@/lib/api";
 import { ActionForm, SubmitButton } from "./action-form";
 import { ExpiryLabel } from "./expiry-label";
+import { EXPIRY_ITEMS, ROLE_ITEMS } from "./share-options";
 import { RoleBadge } from "./role-badge";
 import { UserPicker } from "./user-picker";
-
-const ROLE_ITEMS = [
-  { value: "viewer", label: "Viewer: can read" },
-  { value: "commenter", label: "Commenter: can read and comment" },
-  { value: "editor", label: "Editor: can read and edit" },
-];
-
-const EXPIRY_ITEMS = [
-  { value: "", label: "Never expires" },
-  { value: String(1 / 60), label: "1 minute" },
-  { value: "1", label: "1 hour" },
-  { value: "24", label: "1 day" },
-  { value: "168", label: "1 week" },
-  { value: "720", label: "30 days" },
-];
 
 /** Who a document or folder is shared with, in a side panel: the Owner adds and removes shares here. */
 export function SharingSheet({
@@ -45,6 +31,7 @@ export function SharingSheet({
   onShare,
   onUnshare,
   note,
+  children,
 }: {
   name: string;
   shares: Share[];
@@ -53,6 +40,8 @@ export function SharingSheet({
   onShare: (previous: ActionState, formData: FormData) => Promise<ActionState>;
   onUnshare: (subject: Subject) => Promise<ActionState>;
   note?: string;
+  /** More ways to give access, below the list (the Share links). */
+  children?: ReactNode;
 }) {
   const [subjectType, setSubjectType] = useState<"user" | "team">("user");
   const [pendingSubject, setPendingSubject] = useState<string>();
@@ -216,6 +205,8 @@ export function SharingSheet({
             )}
             {note && <p className="text-xs text-muted-foreground">{note}</p>}
           </section>
+
+          {children}
         </div>
       </SheetContent>
     </Sheet>

@@ -6,8 +6,18 @@ import { redirect } from "next/navigation";
 import { getToken } from "next-auth/jwt";
 import { z } from "zod";
 import { signIn, signOut } from "@/auth";
-import type { ActionState } from "@/lib/action-state";
-import { ApiError, apiGet, apiPost, apiSend, documentSchema, folderSchema, teamSchema } from "@/lib/api";
+import type { ActionState, ShareLinkActionState } from "@/lib/action-state";
+import {
+  ApiError,
+  apiGet,
+  apiPost,
+  apiSend,
+  createdShareLinkSchema,
+  documentSchema,
+  folderSchema,
+  joinedResourceSchema,
+  teamSchema,
+} from "@/lib/api";
 import type { Subject } from "@/lib/api";
 
 /** What a new document is called until its Owner types a title. */
@@ -16,6 +26,15 @@ const idSchema = z.string().uuid();
 const nameSchema = z.string().trim().min(1, "Enter a name.").max(200, "200 characters at most.");
 const roleSchema = z.enum(["editor", "commenter", "viewer"]);
 const messageSchema = z.object({ message: z.string() });
+// The token of a Share link is base64url; anything else cannot be one.
+const tokenSchema = z.string().regex(/^[A-Za-z0-9_-]{1,100}$/);
+const shareLinkFormSchema = z.object({
+  role: roleSchema,
+  expiresInHours: z
+    .string()
+    .transform((value) => (value === "" ? undefined : Number(value)))
+    .pipe(z.number().positive().optional()),
+});
 const subjectFormSchema = z.object({
   subjectType: z.enum(["user", "team"]),
   subjectId: z.string().trim().min(1, "Choose who to share with."),
@@ -70,6 +89,11 @@ export async function suggestUsers(text: string): Promise<string[]> {
 
 export async function login(): Promise<void> {
   await signIn("keycloak", { redirectTo: "/" });
+}
+
+/** Signs in, then comes back to the Share link that was being opened. */
+export async function loginToJoin(token: string): Promise<void> {
+  await signIn("keycloak", { redirectTo: `/join/${tokenSchema.parse(token)}` });
 }
 
 /** Ends the Auth.js session, then the Keycloak SSO session (OIDC RP-initiated logout). */
@@ -293,6 +317,76 @@ export async function removeTeamMember(id: string, userId: string): Promise<Acti
     `Removed ${target} from the team.`,
   );
   if (!result.error) revalidatePath(`/teams/${id}`);
+  return result;
+}
+
+// ---- Share links
+
+export async function createDocumentShareLink(
+  id: string,
+  _previous: ShareLinkActionState,
+  formData: FormData,
+): Promise<ShareLinkActionState> {
+  return createShareLink(`/documents/${idSchema.parse(id)}`, `/documents/${id}`, formData);
+}
+
+export async function createFolderShareLink(
+  id: string,
+  _previous: ShareLinkActionState,
+  formData: FormData,
+): Promise<ShareLinkActionState> {
+  return createShareLink(`/folders/${idSchema.parse(id)}`, `/folders/${id}`, formData);
+}
+
+export async function revokeDocumentShareLink(id: string, linkId: string): Promise<ActionState> {
+  return revokeShareLink(`/documents/${idSchema.parse(id)}`, `/documents/${id}`, linkId);
+}
+
+export async function revokeFolderShareLink(id: string, linkId: string): Promise<ActionState> {
+  return revokeShareLink(`/folders/${idSchema.parse(id)}`, `/folders/${id}`, linkId);
+}
+
+/** Accepts a Share link, then opens what it gave access to. */
+export async function acceptShareLink(token: string): Promise<ActionState> {
+  let target = "";
+  try {
+    const joined = await apiPost(`/share-links/${tokenSchema.parse(token)}/redeem`, {}, joinedResourceSchema);
+    target = `/${joined.type}s/${joined.id}`;
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return {
+        error:
+          error.status === 404 ? "This link doesn't work any more. Ask for a new one." : describe(error),
+      };
+    }
+    throw error;
+  }
+  revalidatePath("/");
+  redirect(target);
+}
+
+async function createShareLink(apiPath: string, pagePath: string, formData: FormData): Promise<ShareLinkActionState> {
+  const body = shareLinkFormSchema.safeParse({
+    role: formData.get("role"),
+    expiresInHours: formData.get("expiresInHours"),
+  });
+  if (!body.success) return invalid(body.error);
+
+  let token = "";
+  const result = await run(async () => {
+    token = (await apiPost(`${apiPath}/share-links`, body.data, createdShareLinkSchema)).token;
+  }, "Link created.");
+  if (result.error) return result;
+  revalidatePath(pagePath);
+  return { ...result, token };
+}
+
+async function revokeShareLink(apiPath: string, pagePath: string, linkId: string): Promise<ActionState> {
+  const result = await run(
+    () => apiSend("DELETE", `${apiPath}/share-links/${idSchema.parse(linkId)}`),
+    "Link revoked.",
+  );
+  if (!result.error) revalidatePath(pagePath);
   return result;
 }
 

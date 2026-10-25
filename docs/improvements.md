@@ -27,7 +27,7 @@ Un job ou une commande `reconcile` qui détecte les documents sans grant `owner`
 | Feature | Intérêt FGA | Remarque |
 |---|---|---|
 | Journal d'audit ("qui a partagé quoi, quand") | Moyen | Concerne les Owners. Les événements Share, Revoke et Move existent déjà. |
-| Liens de partage / invitation par lien | Élevé | Nouveau sujet (`link`). À trancher: ADR. |
+| ✅ Fait — Liens de partage / invitation par lien | Élevé | Finalement un lien qui devient un Grant quand un User connecté l'accepte (ADR 0007), pas un sujet FGA `link`. Pas de limite d'usage, pas de lien anonyme. |
 | Dossiers imbriqués | Élevé | Exclu par l'ADR 0003. Il faudrait le rouvrir: `parent` récursif, risque de cycles. |
 | Transfert de propriété | Moyen | Aujourd'hui un seul Owner. Définir le terme dans le glossaire. |
 | ✅ Fait — Rôle "Commenter" (entre Viewer et Editor) | Élevé | `can_comment`, plus des commentaires minimaux sur un Document (ADR 0006). |

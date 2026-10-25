@@ -11,3 +11,4 @@ A Share link is a row in Postgres (`share_links`), stored through `ShareLinkRepo
 - Revoking a link does not remove the Grants it gave, and a link has no limit on how many Users accept it. Add a count if that is needed: it brings state to update atomically.
 - Anyone signed in who holds the URL can accept it: the URL is as sensitive as the access it gives.
 - Making links anonymous later means a new subject type in `model.fga`: that decision would be a new ADR.
+- "As long as the link" is judged with `Authorizer.expiryOn`, which gives the latest end among all of a User's accesses, whatever their role. A User with a short Editor Grant and a permanent Viewer Grant who accepts a permanent Editor link is wrongly seen as covered, and gets no Grant. Fix it with a role-aware expiry if this matters.
