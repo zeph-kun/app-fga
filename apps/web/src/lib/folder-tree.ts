@@ -64,3 +64,31 @@ export function moveTargets<T extends TreeFolder>(folders: readonly T[], movingI
   const movingHeight = height(movingId);
   return inTreeOrder(folders).filter((folder) => !within.has(folder.id) && folder.level + movingHeight <= MAX_FOLDER_DEPTH);
 }
+
+export interface TreeNode<T extends TreeFolder> {
+  readonly folder: T;
+  readonly children: TreeNode<T>[];
+}
+
+/**
+ * The Folders as nested nodes, to be drawn as a tree. Same rules as `inTreeOrder`: siblings by name, a
+ * Folder whose parent is not in the list at the top, Folders that sit in each other left out.
+ */
+export function buildTree<T extends TreeFolder>(folders: readonly T[]): TreeNode<T>[] {
+  const known = new Set(folders.map((folder) => folder.id));
+  const children = new Map<string | null, T[]>();
+  for (const folder of folders) {
+    const parent = folder.parentId !== null && known.has(folder.parentId) ? folder.parentId : null;
+    children.set(parent, [...(children.get(parent) ?? []), folder]);
+  }
+  const nodes = (parent: string | null): TreeNode<T>[] =>
+    [...(children.get(parent) ?? [])]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((folder) => ({ folder, children: nodes(folder.id) }));
+  return nodes(null);
+}
+
+/** The ids of the Folders to show open so that the Folder on screen is visible in the tree. */
+export function openedFor(folders: readonly TreeFolder[], currentId: string | null): Set<string> {
+  return new Set(currentId === null ? [] : ancestorsOf(folders, currentId).map((folder) => folder.id));
+}

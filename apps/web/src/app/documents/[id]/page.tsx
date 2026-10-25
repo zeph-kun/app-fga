@@ -81,7 +81,7 @@ export default async function DocumentPage({ params, searchParams }: PageProps<"
     : [];
 
   return (
-    <PageShell>
+    <PageShell currentFolderId={doc.folderId}>
       <Breadcrumb
         items={[
           { label: "Home", href: "/" },

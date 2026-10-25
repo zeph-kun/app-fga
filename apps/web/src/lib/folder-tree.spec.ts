@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ancestorsOf, inTreeOrder, moveTargets } from "./folder-tree";
+import { ancestorsOf, buildTree, inTreeOrder, moveTargets, openedFor } from "./folder-tree";
 
 const f = (id: string, parentId: string | null, name = id) => ({ id, name, parentId });
 
@@ -63,5 +63,33 @@ describe("moveTargets", () => {
       ["a", 1],
       ["b", 2],
     ]);
+  });
+});
+
+describe("buildTree", () => {
+  it("nests each Folder under its parent, siblings by name", () => {
+    const tree = buildTree([f("c", "a", "Zeta"), f("b", null, "Beta"), f("a", null, "Alpha"), f("d", "a", "Gamma")]);
+
+    expect(tree.map((node) => node.folder.id)).toEqual(["a", "b"]);
+    expect(tree[0]?.children.map((node) => node.folder.id)).toEqual(["d", "c"]);
+    expect(tree[1]?.children).toEqual([]);
+  });
+
+  it("puts a Folder whose parent is not in the list at the top, and leaves out Folders that sit in each other", () => {
+    expect(buildTree([f("x", "unseen")]).map((node) => node.folder.id)).toEqual(["x"]);
+    expect(buildTree([f("a", "b"), f("b", "a")])).toEqual([]);
+  });
+});
+
+describe("openedFor", () => {
+  const folders = [f("a", null), f("b", "a"), f("c", "b"), f("z", null)];
+
+  it("opens the Folders above the one on screen, and not the Folder itself", () => {
+    expect([...openedFor(folders, "c")].sort()).toEqual(["a", "b"]);
+    expect([...openedFor(folders, "a")]).toEqual([]);
+  });
+
+  it("opens nothing when there is no Folder on screen", () => {
+    expect([...openedFor(folders, null)]).toEqual([]);
   });
 });

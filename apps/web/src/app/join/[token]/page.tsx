@@ -55,7 +55,7 @@ export default async function JoinPage({ params }: PageProps<"/join/[token]">) {
   const { resource } = preview;
 
   return (
-    <PageShell>
+    <PageShell sidebar={false}>
       <div className="flex justify-center py-8">
         <Card className="w-full max-w-md">
           <CardHeader>
