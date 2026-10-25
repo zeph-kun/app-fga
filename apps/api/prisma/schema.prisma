@@ -9,16 +9,17 @@ datasource db {
 
 // Who can see or change a Document is not stored here: it lives in OpenFGA.
 model Document {
-  id         String      @id @default(uuid()) @db.Uuid
-  ownerId    String      @map("owner_id")
+  id         String          @id @default(uuid()) @db.Uuid
+  ownerId    String          @map("owner_id")
   // The Folder the Document is in. Not a foreign key: the service checks the Folder exists.
-  folderId   String?     @map("folder_id") @db.Uuid
+  folderId   String?         @map("folder_id") @db.Uuid
   title      String
   content    String
-  createdAt  DateTime    @default(now()) @map("created_at")
-  updatedAt  DateTime    @updatedAt @map("updated_at")
+  createdAt  DateTime        @default(now()) @map("created_at")
+  updatedAt  DateTime        @updatedAt @map("updated_at")
   comments   Comment[]
   shareLinks ShareLink[]
+  activity   ActivityEntry[]
 
   @@index([folderId])
   @@map("documents")
@@ -39,12 +40,13 @@ model Comment {
 }
 
 model Folder {
-  id         String      @id @default(uuid()) @db.Uuid
-  ownerId    String      @map("owner_id")
+  id         String          @id @default(uuid()) @db.Uuid
+  ownerId    String          @map("owner_id")
   name       String
-  createdAt  DateTime    @default(now()) @map("created_at")
-  updatedAt  DateTime    @updatedAt @map("updated_at")
+  createdAt  DateTime        @default(now()) @map("created_at")
+  updatedAt  DateTime        @updatedAt @map("updated_at")
   shareLinks ShareLink[]
+  activity   ActivityEntry[]
 
   @@map("folders")
 }
@@ -79,4 +81,23 @@ model ShareLink {
   @@index([documentId, createdAt])
   @@index([folderId, createdAt])
   @@map("share_links")
+}
+
+// One change to who has access to a Document or Folder. Exactly one of `documentId` and `folderId` is
+// set (a CHECK in the migration). `details` holds what is particular to `kind`: see ADR 0008.
+model ActivityEntry {
+  id         String    @id @default(uuid()) @db.Uuid
+  documentId String?   @map("document_id") @db.Uuid
+  folderId   String?   @map("folder_id") @db.Uuid
+  actorId    String    @map("actor_id")
+  kind       String
+  details    Json
+  createdAt  DateTime  @default(now()) @map("created_at")
+  // Deleting a Document or Folder deletes its entries.
+  document   Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  folder     Folder?   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, createdAt])
+  @@index([folderId, createdAt])
+  @@map("activity_entries")
 }

@@ -22,6 +22,9 @@ _Avoid_: Permission, access right
 **Share link**: a URL that an Owner creates on a Document or Folder for one role (Editor, Commenter or Viewer) and an optional Expiry. A signed-in User who opens it sees who invites them and to what, and receives a Grant with that role and Expiry once they accept. A link gives nothing before it is accepted, and revoking it does not take back the Grants it already gave (they stay in the Shares list). A User who already has at least that role for at least as long gets no Grant.
 _Avoid_: Invitation, Public link (only signed-in Users can use it)
 
+**Activity log**: the record, read by the Owner of a Document or Folder, of the changes to who has access to it: a Share given or removed, a Share link created, revoked or accepted, a Move. Each entry says who did what, to whom and when, with the names (of a Team, of a Folder) as they were then. It leaves out content, Comments, and an Expiry running out. It goes with the Document or Folder, and an entry can be missing if it could not be written at the time.
+_Avoid_: Audit log (it promises a record that cannot be lost, which this is not)
+
 **Team**: a named group of Users, created by a User who becomes its Team owner. Granting a role to a Team gives it to every member, so adding or removing a member changes their access without touching the Grants. Only the Team owner manages its name and members, and cannot be removed from it.
 _Avoid_: Group
 
