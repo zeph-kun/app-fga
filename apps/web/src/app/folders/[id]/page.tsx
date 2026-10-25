@@ -17,6 +17,7 @@ import { PageShell } from "@/components/layout/page-shell";
 import { ApiError, activitySchema, apiGet, folderViewSchema, shareLinkEntrySchema, shareSchema, teamSchema } from "@/lib/api";
 import {
   createFolderShareLink,
+  deleteDocumentFromList,
   deleteFolder,
   renameFolder,
   revokeFolderShareLink,
@@ -89,6 +90,14 @@ export default async function FolderPage({ params }: PageProps<"/folders/[id]">)
               <ActivitySection activity={activity} />
             </SharingSheet>
           )}
+          {isOwner && (
+            <ConfirmDelete
+              label="Delete folder"
+              title={`Delete “${folder.name}”?`}
+              description="Only an empty folder can be deleted: move or delete its documents first. This removes the folder and everyone's access to it, and cannot be undone."
+              onConfirm={deleteFolder.bind(null, id)}
+            />
+          )}
         </div>
       </div>
 
@@ -107,7 +116,10 @@ export default async function FolderPage({ params }: PageProps<"/folders/[id]">)
             }
           />
         ) : (
-          <DocumentList documents={folder.documents} />
+          <DocumentList
+            documents={folder.documents.map((doc) => ({ ...doc, deletable: isOwner }))}
+            onDelete={deleteDocumentFromList}
+          />
         )}
       </section>
 
@@ -115,25 +127,6 @@ export default async function FolderPage({ params }: PageProps<"/folders/[id]">)
         <div className="mt-8">
           <AccessList users={access} />
         </div>
-      )}
-
-      {isOwner && (
-        <section aria-labelledby="folder-danger" className="mt-12 flex flex-col gap-3 rounded-xl border border-destructive/30 p-4">
-          <h2 id="folder-danger" className="font-medium">
-            Delete this folder
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Only an empty folder can be deleted. Move or delete its documents first.
-          </p>
-          <div>
-            <ConfirmDelete
-              label="Delete folder"
-              title={`Delete “${folder.name}”?`}
-              description="This removes the folder and everyone's access to it. This cannot be undone."
-              onConfirm={deleteFolder.bind(null, id)}
-            />
-          </div>
-        </section>
       )}
     </PageShell>
   );

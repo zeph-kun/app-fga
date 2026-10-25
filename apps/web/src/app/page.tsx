@@ -11,7 +11,7 @@ import { RoleBadge } from "@/components/features/role-badge";
 import { SignIn } from "@/components/features/sign-in";
 import { PageShell } from "@/components/layout/page-shell";
 import { apiGet, documentViewSchema, folderSummarySchema } from "@/lib/api";
-import { createFolder, moveDocument } from "./actions";
+import { createFolder, deleteDocumentFromList, moveDocument } from "./actions";
 
 export default async function Home() {
   const session = await auth();
@@ -104,7 +104,12 @@ export default async function Home() {
               onMove={moveDocument}
               className="pb-8"
             >
-              <DocumentList documents={documents} folderNames={folderNames} movable />
+              <DocumentList
+                documents={documents.map((doc) => ({ ...doc, deletable: doc.access === "owner" }))}
+                folderNames={folderNames}
+                movable
+                onDelete={deleteDocumentFromList}
+              />
             </DocumentDropTarget>
           )}
         </section>

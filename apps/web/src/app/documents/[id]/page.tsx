@@ -118,6 +118,12 @@ export default async function DocumentPage({ params, searchParams }: PageProps<"
               />
               <ActivitySection activity={activity} />
             </SharingSheet>
+            <ConfirmDelete
+              label="Delete document"
+              title={`Delete “${doc.title}”?`}
+              description="The document and everyone’s access to it are removed for good. This cannot be undone."
+              onConfirm={deleteDocument.bind(null, id)}
+            />
           </div>
         )}
       </div>
@@ -160,25 +166,6 @@ export default async function DocumentPage({ params, searchParams }: PageProps<"
         <div className="mt-8">
           <AccessList users={access} />
         </div>
-      )}
-
-      {isOwner && (
-        <section aria-labelledby="doc-danger" className="mt-12 flex flex-col gap-3 rounded-xl border border-destructive/30 p-4">
-          <h2 id="doc-danger" className="font-medium">
-            Delete this document
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            The document and everyone’s access to it are removed for good.
-          </p>
-          <div>
-            <ConfirmDelete
-              label="Delete document"
-              title={`Delete “${doc.title}”?`}
-              description="This cannot be undone."
-              onConfirm={deleteDocument.bind(null, id)}
-            />
-          </div>
-        </section>
       )}
     </PageShell>
   );

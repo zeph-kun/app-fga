@@ -30,17 +30,27 @@ export default async function TeamPage({ params }: PageProps<"/teams/[id]">) {
     <PageShell>
       <Breadcrumb items={[{ label: "Teams", href: "/teams" }, { label: team.name }]} />
 
-      <div className="flex flex-col gap-2">
-        <InlineRenameTitle
-          name={team.name}
-          label="Team name"
-          canEdit={isOwner}
-          onRename={renameTeam.bind(null, id)}
-        />
-        <p className="text-sm text-muted-foreground">
-          Owned by {team.ownerId} · {team.members.length}{" "}
-          {team.members.length === 1 ? "member" : "members"}
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex min-w-0 flex-col gap-2">
+          <InlineRenameTitle
+            name={team.name}
+            label="Team name"
+            canEdit={isOwner}
+            onRename={renameTeam.bind(null, id)}
+          />
+          <p className="text-sm text-muted-foreground">
+            Owned by {team.ownerId} · {team.members.length}{" "}
+            {team.members.length === 1 ? "member" : "members"}
+          </p>
+        </div>
+        {isOwner && (
+          <ConfirmDelete
+            label="Delete team"
+            title={`Delete “${team.name}”?`}
+            description="Members lose any access they only had through this team. The team and its membership are removed for good, and this cannot be undone."
+            onConfirm={deleteTeam.bind(null, id)}
+          />
+        )}
       </div>
 
       <section aria-labelledby="team-members" className="mt-8 flex flex-col gap-3">
@@ -58,28 +68,6 @@ export default async function TeamPage({ params }: PageProps<"/teams/[id]">) {
           onRemove={removeTeamMember.bind(null, id)}
         />
       </section>
-
-      {isOwner && (
-        <section
-          aria-labelledby="team-danger"
-          className="mt-12 flex flex-col gap-3 rounded-xl border border-destructive/30 p-4"
-        >
-          <h2 id="team-danger" className="font-medium">
-            Delete this team
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Members lose any access they only had through this team. This cannot be undone.
-          </p>
-          <div>
-            <ConfirmDelete
-              label="Delete team"
-              title={`Delete “${team.name}”?`}
-              description="This removes the team and its membership for good."
-              onConfirm={deleteTeam.bind(null, id)}
-            />
-          </div>
-        </section>
-      )}
     </PageShell>
   );
 }

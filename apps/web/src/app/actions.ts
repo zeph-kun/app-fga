@@ -181,6 +181,16 @@ export async function deleteDocument(id: string): Promise<ActionState> {
   redirect("/");
 }
 
+/** Deletes a document from a list: the page stays, and the list loses the row. */
+export async function deleteDocumentFromList(id: string): Promise<ActionState> {
+  const result = await run(() => apiSend("DELETE", `/documents/${idSchema.parse(id)}`), "Document deleted.");
+  if (!result.error) {
+    revalidatePath("/");
+    revalidatePath("/folders/[id]", "page");
+  }
+  return result;
+}
+
 /** `folderId` null takes the document out of any folder. */
 export async function moveDocument(id: string, folderId: string | null): Promise<ActionState> {
   const result = await run(
