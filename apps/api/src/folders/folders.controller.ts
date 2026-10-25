@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
 import { z } from 'zod';
 import type { AuthUser } from '../auth/access-token-verifier.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
@@ -9,6 +9,8 @@ import { RateLimited } from '../http/user-throttler.guard.js';
 import { FoldersService } from './folders.service.js';
 
 const nameSchema = z.object({ name: z.string().trim().min(1).max(200) });
+const createSchema = nameSchema.extend({ parentId: z.string().uuid().nullish() });
+const parentSchema = z.object({ parentId: z.string().uuid().nullable() });
 
 @Controller('folders')
 @UseGuards(JwtAuthGuard)
@@ -22,7 +24,7 @@ export class FoldersController {
 
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() body: unknown) {
-    return this.folders.create(user.id, parse(nameSchema, body));
+    return this.folders.create(user.id, parse(createSchema, body));
   }
 
   @Get(':id')
@@ -33,6 +35,11 @@ export class FoldersController {
   @Patch(':id')
   rename(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: unknown) {
     return this.folders.rename(user.id, id, parse(nameSchema, body));
+  }
+
+  @Put(':id/parent')
+  move(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: unknown) {
+    return this.folders.move(user.id, id, parse(parentSchema, body).parentId);
   }
 
   @Delete(':id')

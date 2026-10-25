@@ -1,5 +1,6 @@
 import { ActivityLog } from '../activity-log/activity-log.js';
 import { InMemoryActivityLogRepository } from '../activity-log/in-memory-activity-log-repository.js';
+import { randomUUID } from 'node:crypto';
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { folderRef, teamSubject, userSubject } from '../authorization/authorizer.js';
 import { InMemoryAuthorizer } from '../authorization/in-memory-authorizer.js';
@@ -232,6 +233,172 @@ describe('FoldersService', () => {
       );
 
       expect((await activity.forResource('alice', { type: 'folder', id: folder.id })).entries).toEqual([]);
+    });
+  });
+
+  describe('Folders in Folders', () => {
+    /** A chain of `depth` Folders owned by alice, each in the previous one. */
+    async function chain(service: ReturnType<typeof setup>['service'], depth: number) {
+      const folders = [await service.create('alice', { name: 'Level 1' })];
+      for (let level = 2; level <= depth; level++) {
+        folders.push(await service.create('alice', { name: `Level ${level}`, parentId: folders[level - 2]?.id ?? null }));
+      }
+      return folders;
+    }
+
+    describe('creating', () => {
+      it('puts the new Folder in its parent, makes its creator the Owner and gives it the roles of the parent', async () => {
+        const { service } = setup();
+        const parent = await service.create('alice', { name: 'Projects' });
+        await service.share('alice', parent.id, { subject: userSubject('bob'), role: 'viewer' });
+
+        const child = await service.create('alice', { name: 'Plans', parentId: parent.id });
+
+        expect(child).toMatchObject({ name: 'Plans', ownerId: 'alice', parentId: parent.id });
+        expect(await service.get('bob', child.id)).toMatchObject({ access: 'viewer', parentId: parent.id });
+        expect(await service.get('alice', child.id)).toMatchObject({ access: 'owner' });
+      });
+
+      it('needs the right to edit the parent: 403 for a viewer, 404 for a User who cannot see it', async () => {
+        const { service } = setup();
+        const parent = await service.create('alice', { name: 'Projects' });
+        await service.share('alice', parent.id, { subject: userSubject('bob'), role: 'viewer' });
+        await service.share('alice', parent.id, { subject: userSubject('carol'), role: 'editor' });
+
+        await expect(service.create('bob', { name: 'Plans', parentId: parent.id })).rejects.toBeInstanceOf(ForbiddenException);
+        await expect(service.create('alice', { name: 'Plans', parentId: randomUUID() })).rejects.toBeInstanceOf(NotFoundException);
+        expect(await service.create('carol', { name: 'Plans', parentId: parent.id })).toMatchObject({ ownerId: 'carol' });
+      });
+
+      it('allows 5 levels and refuses a 6th', async () => {
+        const { service } = setup();
+        const folders = await chain(service, 5);
+
+        await expect(service.create('alice', { name: 'Level 6', parentId: folders[4]?.id ?? null })).rejects.toBeInstanceOf(
+          BadRequestException,
+        );
+      });
+    });
+
+    describe('what a User sees of the tree', () => {
+      it('lists the Folders directly in a Folder, and not those further down', async () => {
+        const { service } = setup();
+        const parent = await service.create('alice', { name: 'Projects' });
+        const open = await service.create('alice', { name: 'Open', parentId: parent.id });
+        await service.create('alice', { name: 'Plans', parentId: parent.id });
+        await service.create('alice', { name: 'Deeper', parentId: open.id });
+        await service.share('alice', parent.id, { subject: userSubject('bob'), role: 'viewer' });
+
+        const view = await service.get('bob', parent.id);
+
+        expect(view.folders.map((f) => f.name).sort()).toEqual(['Open', 'Plans']);
+        expect(view.folders.every((f) => f.parentId === parent.id)).toBe(true);
+      });
+
+      it('gives the breadcrumb of the Folders above that the User can see, nearest last', async () => {
+        const { service } = setup();
+        const [top, middle, bottom] = await chain(service, 3);
+        await service.share('alice', middle?.id ?? '', { subject: userSubject('bob'), role: 'viewer' });
+
+        expect((await service.get('alice', bottom?.id ?? '')).breadcrumb.map((f) => f.name)).toEqual(['Level 1', 'Level 2']);
+        const seenByBob = await service.get('bob', bottom?.id ?? '');
+
+        expect(seenByBob.breadcrumb.map((f) => f.name)).toEqual(['Level 2']);
+        expect(seenByBob.breadcrumb.map((f) => f.id)).not.toContain(top?.id);
+      });
+
+      it('shows a Folder whose parent the User cannot see at the top, without the parent', async () => {
+        const { service } = setup();
+        const [top, middle] = await chain(service, 2);
+        await service.share('alice', middle?.id ?? '', { subject: userSubject('bob'), role: 'viewer' });
+
+        const list = await service.list('bob');
+        const view = await service.get('bob', middle?.id ?? '');
+
+        expect(list).toEqual([expect.objectContaining({ id: middle?.id, parentId: null })]);
+        expect(view.parentId).toBeNull();
+        expect(JSON.stringify([list, view])).not.toContain(top?.id);
+      });
+    });
+
+    describe('moving', () => {
+      it('puts a Folder in another one, with everything in it, and out to the top with null', async () => {
+        const { service } = setup();
+        const target = await service.create('alice', { name: 'Archive' });
+        const [top, middle] = await chain(service, 2);
+        await service.share('alice', target.id, { subject: userSubject('bob'), role: 'viewer' });
+
+        const moved = await service.move('alice', middle?.id ?? '', target.id);
+
+        expect(moved).toMatchObject({ id: middle?.id, parentId: target.id });
+        expect(await service.get('bob', middle?.id ?? '')).toMatchObject({ access: 'viewer' });
+        expect((await service.get('alice', target.id)).folders.map((f) => f.id)).toEqual([middle?.id]);
+        expect((await service.get('alice', top?.id ?? '')).folders).toEqual([]);
+
+        await service.move('alice', middle?.id ?? '', null);
+
+        await expect(service.get('bob', middle?.id ?? '')).rejects.toBeInstanceOf(NotFoundException);
+      });
+
+      it('is for the Owner of the Folder, into a Folder they can edit', async () => {
+        const { service } = setup();
+        const mine = await service.create('alice', { name: 'Mine' });
+        const target = await service.create('alice', { name: 'Target' });
+        await service.share('alice', mine.id, { subject: userSubject('bob'), role: 'editor' });
+        await service.share('alice', target.id, { subject: userSubject('carol'), role: 'viewer' });
+        const carols = await service.create('carol', { name: 'Carols' });
+
+        await expect(service.move('bob', mine.id, target.id)).rejects.toBeInstanceOf(ForbiddenException);
+        await expect(service.move('carol', carols.id, target.id)).rejects.toBeInstanceOf(ForbiddenException);
+        await expect(service.move('alice', mine.id, randomUUID())).rejects.toBeInstanceOf(NotFoundException);
+      });
+
+      it('refuses to move a Folder into itself or into one of its own Folders', async () => {
+        const { service } = setup();
+        const [top, , bottom] = await chain(service, 3);
+
+        await expect(service.move('alice', top?.id ?? '', top?.id ?? null)).rejects.toBeInstanceOf(BadRequestException);
+        await expect(service.move('alice', top?.id ?? '', bottom?.id ?? null)).rejects.toBeInstanceOf(BadRequestException);
+        expect(await service.get('alice', top?.id ?? '')).toMatchObject({ parentId: null });
+      });
+
+      it('refuses a move that would make the tree deeper than 5 levels, counting what is in the Folder', async () => {
+        const { service } = setup();
+        const deep = await chain(service, 4);
+        const movable = await service.create('alice', { name: 'Movable' });
+        await service.create('alice', { name: 'Below', parentId: movable.id });
+
+        await expect(service.move('alice', movable.id, deep[3]?.id ?? null)).rejects.toBeInstanceOf(BadRequestException);
+        expect(await service.move('alice', movable.id, deep[2]?.id ?? null)).toMatchObject({ parentId: deep[2]?.id });
+      });
+
+      it('is noted in the Activity log of the moved Folder, with the names of the Folders', async () => {
+        const { service, activity } = setup();
+        const target = await service.create('alice', { name: 'Archive' });
+        const folder = await service.create('alice', { name: 'Plans' });
+
+        await service.move('alice', folder.id, target.id);
+        await service.move('alice', folder.id, null);
+
+        const { entries } = await activity.forResource('alice', { type: 'folder', id: folder.id });
+        expect(entries.map((e) => e.event)).toEqual([
+          { kind: 'moved', from: { id: target.id, name: 'Archive' }, to: null },
+          { kind: 'moved', from: null, to: { id: target.id, name: 'Archive' } },
+        ]);
+      });
+    });
+
+    describe('deleting', () => {
+      it('refuses to delete a Folder that still has a Folder in it', async () => {
+        const { service } = setup();
+        const [top, middle] = await chain(service, 2);
+
+        await expect(service.remove('alice', top?.id ?? '')).rejects.toBeInstanceOf(ConflictException);
+
+        await service.remove('alice', middle?.id ?? '');
+        await service.remove('alice', top?.id ?? '');
+        await expect(service.get('alice', top?.id ?? '')).rejects.toBeInstanceOf(NotFoundException);
+      });
     });
   });
 });
