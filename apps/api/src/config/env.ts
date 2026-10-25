@@ -19,6 +19,10 @@ const envSchema = z.object({
     .transform((list) => [...new Set(list.split(',').map((name) => name.trim()).filter(Boolean))]),
   /** Requests allowed per IP per minute, across the whole API. */
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(120),
+  /** Requests allowed per signed-in User per minute to give or revoke a Share, on top of the global limit. */
+  RATE_LIMIT_SHARE_PER_MINUTE: z.coerce.number().int().positive().default(30),
+  /** Requests allowed per signed-in User per minute to search the user directory, on top of the global limit. */
+  RATE_LIMIT_USER_SEARCH_PER_MINUTE: z.coerce.number().int().positive().default(60),
 });
 
 export type Env = z.infer<typeof envSchema>;

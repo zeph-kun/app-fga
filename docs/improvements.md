@@ -38,8 +38,8 @@ Un job ou une commande `reconcile` qui détecte les documents sans grant `owner`
 
 ## 3. Qualité et sécurité
 
-- **Rate limit par route**: il n'y en a pas (cf. CLAUDE.md). Un throttle plus strict sur les routes de partage et de lecture d'utilisateurs limiterait l'énumération de usernames.
-- ✅ **Fait — énumération d'utilisateurs**: le panneau de partage propose maintenant les utilisateurs Keycloak (`GET /users?q=`, préfixe, 8 au plus, sans l'appelant), et l'ADR 0004 acte que tout utilisateur connecté peut les chercher. Reste ouvert: un throttle par route, et le même sélecteur pour ajouter un membre à une Team.
+- ✅ **Fait — rate limit par route**: `GET /users` (60/min) et les routes de partage (30/min, par route) sont limitées par utilisateur connecté (`UserThrottlerGuard`, `@RateLimited`), en plus de la limite globale par IP. Réglages: `RATE_LIMIT_USER_SEARCH_PER_MINUTE` et `RATE_LIMIT_SHARE_PER_MINUTE`.
+- ✅ **Fait — énumération d'utilisateurs**: le panneau de partage propose maintenant les utilisateurs Keycloak (`GET /users?q=`, préfixe, 8 au plus, sans l'appelant), et l'ADR 0004 acte que tout utilisateur connecté peut les chercher. Reste ouvert: le même sélecteur pour ajouter un membre à une Team.
 - ✅ **Fait — tests de propriété sur le contrat `Authorizer`** (`authorizer.properties.ts`, comparés à un modèle de `model.fga` sur les deux adapters). Ils ont révélé que `grant` et `addTeamMember` échouaient sur OpenFGA quand le tuple existait déjà; les deux sont maintenant idempotents.
   Piste d'origine: séquences aléatoires de grants, revokes et moves, comparées entre `InMemoryAuthorizer` et `OpenFgaAuthorizer`. Meilleure défense contre la divergence avec `model.fga`.
 - **Tests e2e web** (Playwright) sur le parcours Share, expiry puis page `access-ended`.

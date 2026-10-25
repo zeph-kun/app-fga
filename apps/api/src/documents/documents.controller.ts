@@ -17,6 +17,7 @@ import { CurrentUser } from '../auth/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { parse } from '../http/parse.js';
 import { shareSchema, usernameSchema } from '../http/schemas.js';
+import { RateLimited } from '../http/user-throttler.guard.js';
 import { DocumentsService } from './documents.service.js';
 
 const createSchema = z.object({
@@ -86,18 +87,21 @@ export class DocumentsController {
 
   @Post('documents/:id/shares')
   @HttpCode(204)
+  @RateLimited('share')
   share(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: unknown) {
     return this.documents.share(user.id, id, parse(shareSchema, body));
   }
 
   @Delete('documents/:id/shares/users/:userId')
   @HttpCode(204)
+  @RateLimited('share')
   unshareUser(@CurrentUser() user: AuthUser, @Param('id') id: string, @Param('userId') target: string) {
     return this.documents.unshare(user.id, id, { type: 'user', id: parse(usernameSchema, target) });
   }
 
   @Delete('documents/:id/shares/teams/:teamId')
   @HttpCode(204)
+  @RateLimited('share')
   unshareTeam(@CurrentUser() user: AuthUser, @Param('id') id: string, @Param('teamId') teamId: string) {
     return this.documents.unshare(user.id, id, { type: 'team', id: teamId });
   }

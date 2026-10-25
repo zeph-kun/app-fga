@@ -5,6 +5,7 @@ import { CurrentUser } from '../auth/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { parse } from '../http/parse.js';
 import { shareSchema, usernameSchema } from '../http/schemas.js';
+import { RateLimited } from '../http/user-throttler.guard.js';
 import { FoldersService } from './folders.service.js';
 
 const nameSchema = z.object({ name: z.string().trim().min(1).max(200) });
@@ -52,18 +53,21 @@ export class FoldersController {
 
   @Post(':id/shares')
   @HttpCode(204)
+  @RateLimited('share')
   share(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: unknown) {
     return this.folders.share(user.id, id, parse(shareSchema, body));
   }
 
   @Delete(':id/shares/users/:userId')
   @HttpCode(204)
+  @RateLimited('share')
   unshareUser(@CurrentUser() user: AuthUser, @Param('id') id: string, @Param('userId') target: string) {
     return this.folders.unshare(user.id, id, { type: 'user', id: parse(usernameSchema, target) });
   }
 
   @Delete(':id/shares/teams/:teamId')
   @HttpCode(204)
+  @RateLimited('share')
   unshareTeam(@CurrentUser() user: AuthUser, @Param('id') id: string, @Param('teamId') teamId: string) {
     return this.folders.unshare(user.id, id, { type: 'team', id: teamId });
   }
