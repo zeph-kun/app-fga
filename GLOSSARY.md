@@ -19,6 +19,9 @@ _Avoid_: Permission, access right
 
 **Share**: the action of creating a Grant for another User or a Team. Sharing again with a different role replaces the previous Grant.
 
+**Share link**: a URL that an Owner creates on a Document or Folder for one role (Editor, Commenter or Viewer) and an optional Expiry. A signed-in User who opens it sees who invites them and to what, and receives a Grant with that role and Expiry once they accept. A link gives nothing before it is accepted, and revoking it does not take back the Grants it already gave (they stay in the Shares list). A User who already has at least that role for at least as long gets no Grant.
+_Avoid_: Invitation, Public link (only signed-in Users can use it)
+
 **Team**: a named group of Users, created by a User who becomes its Team owner. Granting a role to a Team gives it to every member, so adding or removing a member changes their access without touching the Grants. Only the Team owner manages its name and members, and cannot be removed from it.
 _Avoid_: Group
 
