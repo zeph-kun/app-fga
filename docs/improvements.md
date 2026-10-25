@@ -28,7 +28,7 @@ Un job ou une commande `reconcile` qui détecte les documents sans grant `owner`
 |---|---|---|
 | ✅ Fait — Journal d'audit ("qui a partagé quoi, quand") | Moyen | Appelé *Activity log* dans le domaine (ADR 0008): au mieux, dans Postgres, supprimé avec sa ressource, 50 dernières entrées pour l'Owner. |
 | ✅ Fait — Liens de partage / invitation par lien | Élevé | Finalement un lien qui devient un Grant quand un User connecté l'accepte (ADR 0007), pas un sujet FGA `link`. Pas de limite d'usage, pas de lien anonyme. |
-| Dossiers imbriqués | Élevé | Exclu par l'ADR 0003. Il faudrait le rouvrir: `parent` récursif, risque de cycles. |
+| ✅ Fait — Dossiers imbriqués | Élevé | 5 niveaux, rôles hérités vers le bas, cycles refusés par `FoldersService` (ADR 0009). Pas de glisser-déposer de Folders, ni de vue « tous les Documents en dessous ». |
 | Transfert de propriété | Moyen | Aujourd'hui un seul Owner. Définir le terme dans le glossaire. |
 | ✅ Fait — Rôle "Commenter" (entre Viewer et Editor) | Élevé | `can_comment`, plus des commentaires minimaux sur un Document (ADR 0006). |
 | Historique de versions du contenu | Faible | Plus orienté produit que FGA. |

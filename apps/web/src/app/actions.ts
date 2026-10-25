@@ -220,16 +220,46 @@ export async function unshareDocument(id: string, subject: Subject): Promise<Act
 
 /** Creates a folder and opens it. */
 export async function createFolder(_previous: ActionState, formData: FormData): Promise<ActionState> {
+  return createFolderIn(null, formData);
+}
+
+/** Creates a folder inside another one and opens it. */
+export async function createSubfolder(
+  parentId: string,
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return createFolderIn(idSchema.parse(parentId), formData);
+}
+
+async function createFolderIn(parentId: string | null, formData: FormData): Promise<ActionState> {
   const name = nameSchema.safeParse(formData.get("name"));
   if (!name.success) return invalid(name.error);
 
   let id = "";
   const result = await run(async () => {
-    id = (await apiPost("/folders", { name: name.data }, folderSchema)).id;
+    id = (await apiPost("/folders", { name: name.data, parentId }, folderSchema)).id;
   });
   if (result.error) return result;
   revalidatePath("/");
+  if (parentId) revalidatePath(`/folders/${parentId}`);
   redirect(`/folders/${id}`);
+}
+
+/** `parentId` null takes the folder out to the top. */
+export async function moveFolder(id: string, parentId: string | null): Promise<ActionState> {
+  const result = await run(
+    () =>
+      apiSend("PUT", `/folders/${idSchema.parse(id)}/parent`, {
+        parentId: parentId === null ? null : idSchema.parse(parentId),
+      }),
+    parentId === null ? "Folder moved to the top." : "Folder moved.",
+  );
+  if (!result.error) {
+    revalidatePath("/");
+    revalidatePath("/folders/[id]", "page");
+  }
+  return result;
 }
 
 export async function renameFolder(id: string, formData: FormData): Promise<ActionState> {

@@ -18,21 +18,29 @@ import type { ActionState } from "@/lib/action-state";
 
 const ROOT = "root";
 
-/** Moves a document into one of the folders the user can edit, or back to the root. */
-export function MoveDocument({
+/**
+ * Moves a document or a folder into one of the folders the user can edit, or out to the top. `folders`
+ * come in tree order, each with its `level` (1 at the top) to be shown indented.
+ */
+export function MoveToFolder({
+  noun,
   currentFolderId,
   folders,
   onMove,
 }: {
+  noun: "document" | "folder";
   currentFolderId: string | null;
-  folders: { id: string; name: string }[];
+  folders: { id: string; name: string; level?: number }[];
   onMove: (folderId: string | null) => Promise<ActionState>;
 }) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(currentFolderId ?? ROOT);
   const [error, setError] = useState<string>();
   const [pending, startTransition] = useTransition();
-  const items = [{ value: ROOT, label: "No folder (root)" }, ...folders.map((f) => ({ value: f.id, label: f.name }))];
+  const items = [
+    { value: ROOT, label: "No folder (top level)" },
+    ...folders.map((f) => ({ value: f.id, label: `${"\u00a0\u00a0".repeat((f.level ?? 1) - 1)}${f.name}` })),
+  ];
 
   function move(): void {
     startTransition(async () => {
@@ -62,14 +70,16 @@ export function MoveDocument({
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Move document</DialogTitle>
+          <DialogTitle>Move {noun}</DialogTitle>
           <DialogDescription>
-            The document gets the access of its new folder and loses the access of the previous one.
+            {noun === "folder"
+              ? "The folder, with everything in it, gets the access of its new folder and loses the access of the previous one."
+              : "The document gets the access of its new folder and loses the access of the previous one."}{" "}
             Only folders you can edit are listed.
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-2">
-          <Label htmlFor="move-folder">Folder</Label>
+          <Label htmlFor="move-folder">{noun === "folder" ? "Into folder" : "Folder"}</Label>
           <Select value={value} onValueChange={(next) => next && setValue(next)} items={items}>
             <SelectTrigger id="move-folder" className="w-full">
               <SelectValue />

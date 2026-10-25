@@ -1,12 +1,15 @@
-import { FileText } from "lucide-react";
+import { FileText, FolderPlus } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 import { AccessList } from "@/components/features/access-list";
 import { ConfirmDelete } from "@/components/features/confirm-delete";
+import { CreateDialog } from "@/components/features/create-dialog";
 import { DocumentList } from "@/components/features/document-list";
 import { EmptyState } from "@/components/features/empty-state";
+import { FolderGrid } from "@/components/features/folder-grid";
 import { InlineRenameTitle } from "@/components/features/inline-rename-title";
+import { MoveToFolder } from "@/components/features/move-to-folder";
 import { NewDocumentButton } from "@/components/features/new-document-button";
 import { RoleBadge } from "@/components/features/role-badge";
 import { ActivitySection } from "@/components/features/activity-section";
@@ -14,11 +17,24 @@ import { ShareLinksSection } from "@/components/features/share-links-section";
 import { SharingSheet } from "@/components/features/sharing-sheet";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { PageShell } from "@/components/layout/page-shell";
-import { ApiError, activitySchema, apiGet, folderViewSchema, shareLinkEntrySchema, shareSchema, teamSchema } from "@/lib/api";
+import {
+  ApiError,
+  activitySchema,
+  apiGet,
+  folderSummarySchema,
+  folderViewSchema,
+  shareLinkEntrySchema,
+  shareSchema,
+  teamSchema,
+} from "@/lib/api";
+import { moveTargets } from "@/lib/folder-tree";
 import {
   createFolderShareLink,
+  createSubfolder,
   deleteDocumentFromList,
   deleteFolder,
+  moveDocument,
+  moveFolder,
   renameFolder,
   revokeFolderShareLink,
   shareFolder,
@@ -44,7 +60,8 @@ export default async function FolderPage({ params }: PageProps<"/folders/[id]">)
 
   const canEdit = folder.access === "owner" || folder.access === "editor";
   const isOwner = folder.access === "owner";
-  const [shares, teams, access, links, activity] = await Promise.all([
+  const [allFolders, shares, teams, access, links, activity] = await Promise.all([
+    apiGet("/folders", z.array(folderSummarySchema)),
     isOwner ? apiGet(`/folders/${id}/shares`, z.array(shareSchema)) : [],
     isOwner ? apiGet("/teams", z.array(teamSchema)) : [],
     isOwner ? apiGet(`/folders/${id}/access`, z.array(z.string())) : [],
@@ -52,9 +69,19 @@ export default async function FolderPage({ params }: PageProps<"/folders/[id]">)
     isOwner ? apiGet(`/folders/${id}/activity`, activitySchema) : { entries: [], more: false },
   ]);
 
+  const accessOf = new Map(allFolders.map((summary) => [summary.id, summary.access]));
+  const subfolders = folder.folders.map((child) => ({ ...child, access: accessOf.get(child.id) ?? "viewer" }));
+  const targets = moveTargets(allFolders, id).filter((target) => target.access === "owner" || target.access === "editor");
+
   return (
     <PageShell>
-      <Breadcrumb items={[{ label: "Home", href: "/" }, { label: folder.name }]} />
+      <Breadcrumb
+        items={[
+          { label: "Home", href: "/" },
+          ...folder.breadcrumb.map((ancestor) => ({ label: ancestor.name, href: `/folders/${ancestor.id}` })),
+          { label: folder.name },
+        ]}
+      />
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 flex-col gap-2">
@@ -71,7 +98,29 @@ export default async function FolderPage({ params }: PageProps<"/folders/[id]">)
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           {canEdit && (
+            <CreateDialog
+              trigger="New folder"
+              title="New folder"
+              description={`It is created in “${folder.name}” and gets its roles. Folders go 5 levels deep at most.`}
+              fieldName="name"
+              label="Folder name"
+              placeholder="e.g. Plans"
+              submitLabel="Create folder"
+              action={createSubfolder.bind(null, id)}
+              variant="outline"
+              icon={<FolderPlus aria-hidden />}
+            />
+          )}
+          {canEdit && (
             <NewDocumentButton folderId={id} />
+          )}
+          {isOwner && (
+            <MoveToFolder
+              noun="folder"
+              currentFolderId={folder.parentId}
+              folders={targets}
+              onMove={moveFolder.bind(null, id)}
+            />
           )}
           {isOwner && (
             <SharingSheet
@@ -100,6 +149,19 @@ export default async function FolderPage({ params }: PageProps<"/folders/[id]">)
           )}
         </div>
       </div>
+
+      {(subfolders.length > 0 || canEdit) && (
+        <section aria-labelledby="folder-folders" className="mt-8 flex flex-col gap-3">
+          <h2 id="folder-folders" className="text-lg font-semibold tracking-tight">
+            Folders
+          </h2>
+          {subfolders.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No folders in this folder yet.</p>
+          ) : (
+            <FolderGrid folders={subfolders} onMoveDocument={moveDocument} />
+          )}
+        </section>
+      )}
 
       <section aria-labelledby="folder-documents" className="mt-8 flex flex-col gap-3">
         <h2 id="folder-documents" className="text-lg font-semibold tracking-tight">

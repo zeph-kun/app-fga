@@ -18,6 +18,8 @@ export const folderSchema = z.object({
   id: z.string(),
   name: z.string(),
   ownerId: z.string(),
+  /** The Folder it is in; null at the top, and when the parent is not one the user can see. */
+  parentId: z.string().nullable(),
 });
 
 export const subjectSchema = z.discriminatedUnion("type", [
@@ -113,6 +115,10 @@ export const documentViewSchema = documentSchema.extend({
 export const folderViewSchema = folderSchema.extend({
   access: z.enum(["owner", "editor", "commenter", "viewer"]),
   documents: z.array(documentSchema),
+  /** The Folders directly in it. */
+  folders: z.array(folderSchema),
+  /** The Folders above it that the user can see, the highest first. */
+  breadcrumb: z.array(z.object({ id: z.string(), name: z.string() })),
 });
 
 export type Role = z.infer<typeof folderSummarySchema>["access"];

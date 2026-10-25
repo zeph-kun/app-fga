@@ -1,13 +1,12 @@
-import { FileText, FolderClosed, FolderPlus } from "lucide-react";
-import Link from "next/link";
+import { FileText, FolderPlus } from "lucide-react";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { DocumentDropTarget } from "@/components/features/document-drag";
 import { DocumentList } from "@/components/features/document-list";
 import { EmptyState } from "@/components/features/empty-state";
+import { FolderGrid } from "@/components/features/folder-grid";
 import { CreateDialog } from "@/components/features/create-dialog";
 import { NewDocumentButton } from "@/components/features/new-document-button";
-import { RoleBadge } from "@/components/features/role-badge";
 import { SignIn } from "@/components/features/sign-in";
 import { PageShell } from "@/components/layout/page-shell";
 import { apiGet, documentViewSchema, folderSummarySchema } from "@/lib/api";
@@ -22,6 +21,8 @@ export default async function Home() {
     apiGet("/folders", z.array(folderSummarySchema)),
   ]);
   const folderNames = new Map(folders.map((folder) => [folder.id, folder.name]));
+  // A Folder shared without its parent has no parent in this list: it shows at the top, like the others.
+  const topFolders = folders.filter((folder) => folder.parentId === null);
 
   return (
     <PageShell>
@@ -44,39 +45,13 @@ export default async function Home() {
               iconOnly
             />
           </div>
-          {folders.length === 0 ? (
+          {topFolders.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No folders yet. Group related documents in a folder with the folder button above, then share the
               whole folder in one step.
             </p>
           ) : (
-            <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {folders.map((folder) => (
-                <li key={folder.id}>
-                  <DocumentDropTarget
-                    folderId={folder.id}
-                    disabled={folder.access !== "owner" && folder.access !== "editor"}
-                    hint={`Move into ${folder.name}`}
-                    onMove={moveDocument}
-                    className="h-full"
-                  >
-                  <Link
-                    href={`/folders/${folder.id}`}
-                    className="flex h-full items-center gap-3 rounded-xl border bg-card p-4 outline-none transition-colors hover:bg-muted/60 focus-visible:ring-3 focus-visible:ring-ring/50"
-                  >
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground">
-                      <FolderClosed aria-hidden className="size-5" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-medium">{folder.name}</span>
-                      <span className="block truncate text-xs text-muted-foreground">by {folder.ownerId}</span>
-                    </span>
-                    <RoleBadge role={folder.access} />
-                  </Link>
-                  </DocumentDropTarget>
-                </li>
-              ))}
-            </ul>
+            <FolderGrid folders={topFolders} onMoveDocument={moveDocument} />
           )}
         </section>
 

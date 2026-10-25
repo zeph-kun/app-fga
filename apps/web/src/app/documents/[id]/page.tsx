@@ -7,13 +7,14 @@ import { CommentsSection } from "@/components/features/comments-section";
 import { ConfirmDelete } from "@/components/features/confirm-delete";
 import { DocumentEditor } from "@/components/features/document-editor";
 import { ExpiryLabel } from "@/components/features/expiry-label";
-import { MoveDocument } from "@/components/features/move-document";
+import { MoveToFolder } from "@/components/features/move-to-folder";
 import { RoleBadge } from "@/components/features/role-badge";
 import { ActivitySection } from "@/components/features/activity-section";
 import { ShareLinksSection } from "@/components/features/share-links-section";
 import { SharingSheet } from "@/components/features/sharing-sheet";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { PageShell } from "@/components/layout/page-shell";
+import { ancestorsOf, inTreeOrder } from "@/lib/folder-tree";
 import {
   ApiError,
   activitySchema,
@@ -70,16 +71,23 @@ export default async function DocumentPage({ params, searchParams }: PageProps<"
     isOwner ? apiGet(`/documents/${id}/activity`, activitySchema) : { entries: [], more: false },
   ]);
   const currentFolder = folders.find((folder) => folder.id === doc.folderId);
-  const movable = folders.filter((folder) => folder.access === "owner" || folder.access === "editor");
+  // Levels come from every Folder the user sees, then only the ones they can edit are offered.
+  const movable = inTreeOrder(folders).filter((folder) => folder.access === "owner" || folder.access === "editor");
+  const folderTrail = doc.folderId
+    ? [...ancestorsOf(folders, doc.folderId), ...(currentFolder ? [currentFolder] : [])].map((folder) => ({
+        label: folder.name,
+        href: `/folders/${folder.id}`,
+      }))
+    : [];
 
   return (
     <PageShell>
       <Breadcrumb
         items={[
           { label: "Home", href: "/" },
-          ...(doc.folderId
-            ? [{ label: currentFolder?.name ?? "Folder", href: `/folders/${doc.folderId}` }]
-            : []),
+          ...(doc.folderId && folderTrail.length === 0
+            ? [{ label: "Folder", href: `/folders/${doc.folderId}` }]
+            : folderTrail),
           { label: doc.title },
         ]}
       />
@@ -94,7 +102,8 @@ export default async function DocumentPage({ params, searchParams }: PageProps<"
         </div>
         {isOwner && (
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <MoveDocument
+            <MoveToFolder
+              noun="document"
               currentFolderId={doc.folderId}
               folders={movable}
               onMove={moveDocument.bind(null, id)}
