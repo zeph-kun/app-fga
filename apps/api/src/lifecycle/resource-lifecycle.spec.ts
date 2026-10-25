@@ -10,7 +10,7 @@ import type { Team } from '../teams/team.js';
 import { ResourceLifecycle } from './resource-lifecycle.js';
 
 const document: Document = { id: 'doc-1', title: 'Plan', content: 'v1', ownerId: 'alice', folderId: null };
-const folder: Folder = { id: 'folder-1', name: 'Projects', ownerId: 'alice' };
+const folder: Folder = { id: 'folder-1', name: 'Projects', ownerId: 'alice', parentId: null };
 const team: Team = { id: 'team-1', name: 'Design', ownerId: 'alice' };
 
 /** An InMemoryAuthorizer whose named operations fail, as OpenFGA does when it is down. */

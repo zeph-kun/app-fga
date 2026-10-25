@@ -32,7 +32,7 @@ async function startApp(env: Record<string, string> = {}): Promise<INestApplicat
   const documents = new InMemoryDocumentRepository();
   await documents.save({ id: documentId, title: 'Plan', content: '', ownerId: 'alice', folderId: null });
   const folders = new InMemoryFolderRepository();
-  await folders.save({ id: folderId, name: 'Projects', ownerId: 'alice' });
+  await folders.save({ id: folderId, name: 'Projects', ownerId: 'alice', parentId: null });
   const sharing = new Sharing(authorizer, new InMemoryUserDirectory(['alice', 'bob']), new InMemoryTeamRepository());
 
   const module = await Test.createTestingModule({

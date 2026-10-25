@@ -8,11 +8,11 @@ export class PrismaFolderRepository extends FolderRepository {
     super();
   }
 
-  override async save({ id, ownerId, name }: Folder): Promise<void> {
+  override async save({ id, ownerId, name, parentId }: Folder): Promise<void> {
     await this.prisma.folder.upsert({
       where: { id },
-      create: { id, ownerId, name },
-      update: { name },
+      create: { id, ownerId, name, parentId },
+      update: { name, parentId },
     });
   }
 
@@ -26,6 +26,10 @@ export class PrismaFolderRepository extends FolderRepository {
     return rows.map(toFolder);
   }
 
+  override async findByParent(parentId: string): Promise<Folder[]> {
+    return (await this.prisma.folder.findMany({ where: { parentId } })).map(toFolder);
+  }
+
   override async findAll(): Promise<Folder[]> {
     return (await this.prisma.folder.findMany()).map(toFolder);
   }
@@ -35,6 +39,6 @@ export class PrismaFolderRepository extends FolderRepository {
   }
 }
 
-function toFolder({ id, ownerId, name }: Folder): Folder {
-  return { id, ownerId, name };
+function toFolder({ id, ownerId, name, parentId }: Folder): Folder {
+  return { id, ownerId, name, parentId };
 }

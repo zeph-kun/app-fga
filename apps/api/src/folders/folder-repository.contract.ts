@@ -3,7 +3,7 @@ import type { Folder } from './folder.js';
 import type { FolderRepository } from './folder-repository.js';
 
 function aFolder(overrides: Partial<Folder> = {}): Folder {
-  return { id: randomUUID(), ownerId: 'alice', name: 'Projects', ...overrides };
+  return { id: randomUUID(), ownerId: 'alice', name: 'Projects', parentId: null, ...overrides };
 }
 
 /** Behavior every FolderRepository adapter must have; see document-repository.contract.ts. */
@@ -61,6 +61,36 @@ export function folderRepositoryContract(
 
       expect(await repository.findById(folder.id)).toBeUndefined();
       await expect(repository.delete(folder.id)).resolves.toBeUndefined();
+    });
+
+    it('keeps the parent of a folder, and a folder moved out of it', async () => {
+      const repository = await create();
+      const parent = aFolder();
+      await repository.save(parent);
+      const child = aFolder({ parentId: parent.id });
+      await repository.save(child);
+
+      expect(await repository.findById(child.id)).toEqual(child);
+
+      await repository.save({ ...child, parentId: null });
+
+      expect(await repository.findById(child.id)).toEqual({ ...child, parentId: null });
+    });
+
+    it('lists the folders directly in a folder, and not those further down', async () => {
+      const repository = await create();
+      const parent = aFolder();
+      await repository.save(parent);
+      const [first, second] = [aFolder({ parentId: parent.id }), aFolder({ parentId: parent.id })];
+      await repository.save(first);
+      await repository.save(second);
+      await repository.save(aFolder({ parentId: first.id }));
+      await repository.save(aFolder());
+
+      const found = await repository.findByParent(parent.id);
+
+      expect(found.map((f) => f.id).sort()).toEqual([first.id, second.id].sort());
+      expect(await repository.findByParent(second.id)).toEqual([]);
     });
   });
 }

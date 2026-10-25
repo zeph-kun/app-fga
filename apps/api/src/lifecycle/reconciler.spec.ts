@@ -11,7 +11,7 @@ import { Reconciler } from './reconciler.js';
 import { ResourceLifecycle } from './resource-lifecycle.js';
 
 const document: Document = { id: 'doc-1', title: 'Plan', content: '', ownerId: 'alice', folderId: null };
-const folder: Folder = { id: 'folder-1', name: 'Projects', ownerId: 'alice' };
+const folder: Folder = { id: 'folder-1', name: 'Projects', ownerId: 'alice', parentId: null };
 const team: Team = { id: 'team-1', name: 'Design', ownerId: 'alice' };
 
 function setup() {

@@ -43,11 +43,16 @@ model Folder {
   id         String          @id @default(uuid()) @db.Uuid
   ownerId    String          @map("owner_id")
   name       String
+  // The Folder this one is in. Postgres refuses to delete a Folder that still has Folders in it.
+  parentId   String?         @map("parent_id") @db.Uuid
   createdAt  DateTime        @default(now()) @map("created_at")
   updatedAt  DateTime        @updatedAt @map("updated_at")
   shareLinks ShareLink[]
+  parent     Folder?         @relation("FolderTree", fields: [parentId], references: [id], onDelete: NoAction)
+  children   Folder[]        @relation("FolderTree")
   activity   ActivityEntry[]
 
+  @@index([parentId])
   @@map("folders")
 }
 

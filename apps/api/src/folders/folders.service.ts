@@ -41,7 +41,7 @@ export class FoldersService {
   ) {}
 
   async create(userId: string, input: CreateFolderInput): Promise<Folder> {
-    const folder: Folder = { id: randomUUID(), ownerId: userId, ...input };
+    const folder: Folder = { id: randomUUID(), ownerId: userId, parentId: null, ...input };
     await this.lifecycle.createFolder(folder);
     return folder;
   }

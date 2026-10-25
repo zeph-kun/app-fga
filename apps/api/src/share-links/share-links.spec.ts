@@ -16,7 +16,7 @@ import { InMemoryShareLinkRepository } from './in-memory-share-link-repository.j
 import { ShareLinks } from './share-links.js';
 
 const document: Document = { id: 'doc-1', title: 'Plan', content: '', ownerId: 'alice', folderId: null };
-const folder: Folder = { id: 'folder-1', name: 'Projects', ownerId: 'alice' };
+const folder: Folder = { id: 'folder-1', name: 'Projects', ownerId: 'alice', parentId: null };
 const doc = { type: 'document', id: document.id } as const;
 
 /** alice owns `document` and `folder`; bob, carol and dave are Users who know nothing yet. */

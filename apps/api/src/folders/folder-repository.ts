@@ -13,6 +13,9 @@ export abstract class FolderRepository {
   /** The folders that exist among `ids`; unknown ids are skipped. Order is not guaranteed. */
   abstract findByIds(ids: readonly string[]): Promise<Folder[]>;
 
+  /** The folders directly in a folder (not those further down). Order is not guaranteed. */
+  abstract findByParent(parentId: string): Promise<Folder[]>;
+
   /** Every stored folder, for maintenance (see `Reconciler`). Order is not guaranteed. */
   abstract findAll(): Promise<Folder[]>;
 
