@@ -66,16 +66,35 @@ export class ResourceLifecycle {
     return moved;
   }
 
-  /** Stores the Folder and makes its `ownerId` the Owner, or keeps nothing. */
+  /** Stores the Folder, makes its `ownerId` the Owner and puts it in its parent Folder, or keeps nothing. */
   async createFolder(folder: Folder): Promise<void> {
     await this.folders.save(folder);
     try {
       await this.authorizer.grant(userSubject(folder.ownerId), 'owner', folderRef(folder.id));
+      if (folder.parentId !== null) await this.authorizer.setParent(folderRef(folder.id), folder.parentId);
     } catch (error) {
       // Without its Owner grant nobody could ever open the folder: do not keep it.
       await this.folders.delete(folder.id);
+      // Best effort: the original error is the one worth reporting.
+      await this.authorizer.revokeAll(folderRef(folder.id)).catch(() => undefined);
       throw error;
     }
+  }
+
+  /**
+   * Puts the Folder in another Folder (or at the top with `null`); its roles, and those of
+   * everything in it, follow. Returns the moved Folder. The caller has kept loops and depth out.
+   */
+  async moveFolder(current: Folder, parentId: string | null): Promise<Folder> {
+    const moved: Folder = { ...current, parentId };
+    await this.folders.save(moved);
+    try {
+      await this.authorizer.setParent(folderRef(current.id), parentId);
+    } catch (error) {
+      await this.folders.save(current);
+      throw error;
+    }
+    return moved;
   }
 
   /** Same order and same leniency as `deleteDocument`. */

@@ -100,6 +100,51 @@ describe('Reconciler', () => {
     });
   });
 
+  describe('the parent of a Folder', () => {
+    const inside: Folder = { id: 'folder-2', name: 'Plans', ownerId: 'alice', parentId: folder.id };
+
+    it('links a Folder to the parent its row says, and leaves it be when it already is', async () => {
+      const { authorizer, folders, lifecycle, reconciler } = setup();
+      await lifecycle.createFolder(folder);
+      await lifecycle.createFolder({ ...inside, parentId: null });
+      await folders.save(inside);
+
+      expect(await reconciler.reconcile({ apply: false })).toEqual([
+        { kind: 'wrong-parent', id: inside.id, expected: folder.id, actual: null },
+      ]);
+      await reconciler.reconcile({ apply: true });
+
+      expect(await authorizer.parentOf(folderRef(inside.id))).toBe(folder.id);
+      expect(await reconciler.reconcile({ apply: false })).toEqual([]);
+    });
+
+    it('takes a Folder out of a parent its row no longer names', async () => {
+      const { authorizer, lifecycle, reconciler } = setup();
+      await lifecycle.createFolder(folder);
+      await lifecycle.createFolder(inside);
+      await lifecycle.moveFolder(inside, null);
+      await authorizer.setParent(folderRef(inside.id), folder.id);
+
+      await reconciler.reconcile({ apply: true });
+
+      expect(await authorizer.parentOf(folderRef(inside.id))).toBeNull();
+    });
+
+    it('reports Folders that sit in each other once, and does not copy the loop into OpenFGA', async () => {
+      const { authorizer, folders, lifecycle, reconciler } = setup();
+      await lifecycle.createFolder(folder);
+      await lifecycle.createFolder({ ...inside, parentId: null });
+      await folders.save({ ...folder, parentId: inside.id });
+      await folders.save({ ...inside, parentId: folder.id });
+
+      const findings = await reconciler.reconcile({ apply: true });
+
+      expect(findings).toEqual([{ kind: 'parent-cycle', ids: [folder.id, inside.id] }]);
+      expect(await authorizer.parentOf(folderRef(folder.id))).toBeNull();
+      expect(await authorizer.parentOf(folderRef(inside.id))).toBeNull();
+    });
+  });
+
   describe('grants left behind by a deleted Document or Folder', () => {
     it('removes them when applying and keeps the grants of existing ones', async () => {
       const { authorizer, documents, folders, lifecycle, reconciler } = setup();

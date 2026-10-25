@@ -174,6 +174,58 @@ describe('ResourceLifecycle', () => {
     });
   });
 
+  describe('Folders in Folders', () => {
+    const child: Folder = { id: 'folder-2', name: 'Plans', ownerId: 'alice', parentId: folder.id };
+
+    it('puts a new Folder in its parent: it gets the roles of the parent', async () => {
+      const { authorizer, folders, lifecycle } = setup();
+      await lifecycle.createFolder(folder);
+      await authorizer.grant(userSubject('bob'), 'viewer', folderRef(folder.id));
+
+      await lifecycle.createFolder(child);
+
+      expect(await folders.findById(child.id)).toEqual(child);
+      expect(await authorizer.parentOf(folderRef(child.id))).toBe(folder.id);
+      expect(await authorizer.can('bob', 'can_view', folderRef(child.id))).toBe(true);
+    });
+
+    it('keeps nothing when the link to the parent cannot be written', async () => {
+      const { folders, lifecycle } = setup(['setParent', 'revokeAll']);
+
+      await expect(lifecycle.createFolder(child)).rejects.toThrow('OpenFGA unavailable');
+
+      expect(await folders.findById(child.id)).toBeUndefined();
+    });
+
+    it('moves a Folder: the row and the roles follow, and null takes it out to the top', async () => {
+      const { authorizer, folders, lifecycle } = setup();
+      await lifecycle.createFolder(folder);
+      await lifecycle.createFolder({ ...child, parentId: null });
+      await authorizer.grant(userSubject('bob'), 'viewer', folderRef(folder.id));
+
+      const moved = await lifecycle.moveFolder({ ...child, parentId: null }, folder.id);
+
+      expect(moved).toEqual(child);
+      expect(await folders.findById(child.id)).toEqual(child);
+      expect(await authorizer.can('bob', 'can_view', folderRef(child.id))).toBe(true);
+
+      await lifecycle.moveFolder(child, null);
+
+      expect(await folders.findById(child.id)).toEqual({ ...child, parentId: null });
+      expect(await authorizer.can('bob', 'can_view', folderRef(child.id))).toBe(false);
+    });
+
+    it('keeps the Folder where it was when the link cannot be written', async () => {
+      const { folders, lifecycle } = setup(['setParent']);
+      const top = { ...child, parentId: null };
+      await folders.save(top);
+
+      await expect(lifecycle.moveFolder(top, folder.id)).rejects.toThrow('OpenFGA unavailable');
+
+      expect(await folders.findById(child.id)).toEqual(top);
+    });
+  });
+
   describe('deleteFolder', () => {
     it('removes the Folder and every grant on it', async () => {
       const { authorizer, folders, lifecycle } = setup();

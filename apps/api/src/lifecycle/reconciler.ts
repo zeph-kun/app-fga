@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Authorizer, type Resource, documentRef, folderRef, teamSubject, userSubject } from '../authorization/authorizer.js';
 import { Membership } from '../authorization/membership.js';
 import { DocumentRepository } from '../documents/document-repository.js';
+import type { Folder } from '../folders/folder.js';
 import { FolderRepository } from '../folders/folder-repository.js';
 import { TeamRepository } from '../teams/team-repository.js';
 
@@ -11,6 +12,10 @@ export type Finding =
   | { kind: 'missing-owner'; type: 'document' | 'folder'; id: string; ownerId: string }
   /** The Folder link in OpenFGA is not the one the Document row names. */
   | { kind: 'wrong-folder'; id: string; expected: string | null; actual: string | null }
+  /** The parent link in OpenFGA is not the one the Folder row names. */
+  | { kind: 'wrong-parent'; id: string; expected: string | null; actual: string | null }
+  /** Folders whose rows put each of them in the next: access cannot be resolved. Reported, never repaired. */
+  | { kind: 'parent-cycle'; ids: string[] }
   /** Grants (or a Folder link) on an id that has no row any more. */
   | { kind: 'orphan-grants'; type: 'document' | 'folder'; id: string }
   /** The Team exists but its owner is not a member, which creating a Team always makes them. */
@@ -44,10 +49,20 @@ export class Reconciler {
       this.teams.findAll(),
     ]);
 
-    for (const { id, ownerId } of folders) {
+    const cycles = parentCycles(folders);
+    for (const ids of cycles) findings.push({ kind: 'parent-cycle', ids });
+    const inCycle = new Set(cycles.flat());
+
+    for (const { id, ownerId, parentId } of folders) {
       if (!(await this.ownerHolds(folderRef(id), ownerId))) {
         findings.push({ kind: 'missing-owner', type: 'folder', id, ownerId });
         if (apply) await this.authorizer.grant(userSubject(ownerId), 'owner', folderRef(id));
+      }
+      const actual = await this.authorizer.parentOf(folderRef(id));
+      // A loop is not copied into OpenFGA, where it would break the access of everything in it.
+      if (actual !== parentId && !inCycle.has(id)) {
+        findings.push({ kind: 'wrong-parent', id, expected: parentId, actual });
+        if (apply) await this.authorizer.setParent(folderRef(id), parentId);
       }
     }
     for (const { id, ownerId, folderId } of documents) {
@@ -104,4 +119,22 @@ export class Reconciler {
     const grants = await this.authorizer.grantsOn(resource);
     return grants.some((g) => g.role === 'owner' && g.subject.type === 'user' && g.subject.id === ownerId);
   }
+}
+
+/** The sets of Folders that are each other's ancestors, each set once, ids in order. */
+function parentCycles(folders: readonly Folder[]): string[][] {
+  const parentOf = new Map(folders.map((f) => [f.id, f.parentId]));
+  const found = new Map<string, string[]>();
+  for (const { id } of folders) {
+    const path: string[] = [];
+    let current: string | null | undefined = id;
+    while (current !== null && current !== undefined && !path.includes(current)) {
+      path.push(current);
+      current = parentOf.get(current);
+    }
+    if (current === null || current === undefined) continue;
+    const loop = path.slice(path.indexOf(current)).sort();
+    found.set(loop.join(','), loop);
+  }
+  return [...found.values()];
 }
