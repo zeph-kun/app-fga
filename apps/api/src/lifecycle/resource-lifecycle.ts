@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Authorizer, documentRef, folderRef, userSubject } from '../authorization/authorizer.js';
+import { Authorizer, documentRef, folderRef, teamSubject, userSubject } from '../authorization/authorizer.js';
 import { Membership } from '../authorization/membership.js';
 import type { Document } from '../documents/document.js';
 import { DocumentRepository } from '../documents/document-repository.js';
@@ -96,15 +96,16 @@ export class ResourceLifecycle {
   }
 
   /**
-   * Removes every member, then the row. The other way round from a Document: a Team's grants stay
-   * on the resources shared with it, so members must lose their membership first or a failure here
-   * would leave people with access through a Team that no longer exists. A failure keeps the row,
-   * so the delete can simply be retried.
+   * Removes every member and every grant given to the Team, then the row. The other way round
+   * from a Document: members must lose their membership first or a failure here would leave
+   * people with access through a Team that no longer exists. A failure keeps the row, so the
+   * delete can simply be retried.
    */
   async deleteTeam(id: string): Promise<void> {
     for (const member of await this.membership.members(id)) {
       await this.membership.remove(id, member);
     }
+    await this.authorizer.revokeEverywhere(teamSubject(id));
     await this.teams.delete(id);
   }
 

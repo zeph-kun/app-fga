@@ -73,6 +73,13 @@ export class InMemoryAuthorizer extends Authorizer {
     return Promise.resolve();
   }
 
+  override revokeEverywhere(subject: Subject): Promise<void> {
+    for (const [k, g] of this.grants) {
+      if (g.subject.type === subject.type && g.subject.id === subject.id) this.grants.delete(k);
+    }
+    return Promise.resolve();
+  }
+
   override async resourcesWhere(
     userId: string,
     permission: RolePermission,

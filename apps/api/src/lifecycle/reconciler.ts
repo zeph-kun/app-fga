@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Authorizer, type Resource, documentRef, folderRef, userSubject } from '../authorization/authorizer.js';
+import { Authorizer, type Resource, documentRef, folderRef, teamSubject, userSubject } from '../authorization/authorizer.js';
 import { Membership } from '../authorization/membership.js';
 import { DocumentRepository } from '../documents/document-repository.js';
 import { FolderRepository } from '../folders/folder-repository.js';
@@ -16,7 +16,9 @@ export type Finding =
   /** The Team exists but its owner is not a member, which creating a Team always makes them. */
   | { kind: 'owner-not-member'; id: string; ownerId: string }
   /** Members of a Team id that has no row: they would keep what was shared with that Team. */
-  | { kind: 'orphan-members'; id: string };
+  | { kind: 'orphan-members'; id: string }
+  /** Grants given to a Team id that has no row: the resources would keep showing "Deleted team". */
+  | { kind: 'orphan-team-grants'; id: string };
 
 /**
  * Finds, and optionally repairs, what a crash between the two writes of `ResourceLifecycle`
@@ -82,6 +84,18 @@ export class Reconciler {
       if (knownTeams.has(id)) continue;
       findings.push({ kind: 'orphan-members', id });
       if (apply) for (const member of await this.membership.members(id)) await this.membership.remove(id, member);
+    }
+    const grantedTeams = new Set<string>();
+    for (const type of ['document', 'folder'] as const) {
+      for (const id of await this.authorizer.resourcesWithGrants(type)) {
+        for (const { subject } of await this.authorizer.grantsOn({ type, id })) {
+          if (subject.type === 'team' && !knownTeams.has(subject.id)) grantedTeams.add(subject.id);
+        }
+      }
+    }
+    for (const id of [...grantedTeams].sort()) {
+      findings.push({ kind: 'orphan-team-grants', id });
+      if (apply) await this.authorizer.revokeEverywhere(teamSubject(id));
     }
     return findings;
   }

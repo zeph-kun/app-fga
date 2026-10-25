@@ -1,4 +1,4 @@
-import { documentRef, folderRef, userSubject } from '../authorization/authorizer.js';
+import { documentRef, folderRef, teamSubject, userSubject } from '../authorization/authorizer.js';
 import { InMemoryAuthorizer } from '../authorization/in-memory-authorizer.js';
 import { InMemoryMembership } from '../authorization/in-memory-membership.js';
 import type { Document } from '../documents/document.js';
@@ -155,6 +155,30 @@ describe('Reconciler', () => {
 
       expect(await membership.members('gone-team')).toEqual([]);
       expect((await membership.members(team.id)).sort()).toEqual(['alice', 'bob']);
+      expect(await reconciler.reconcile({ apply: false })).toEqual([]);
+    });
+  });
+
+  describe('grants left behind by a Team that no longer exists', () => {
+    it('removes them when applying and keeps the grants of existing Teams and Users', async () => {
+      const { authorizer, lifecycle, reconciler } = setup();
+      await lifecycle.createTeam(team);
+      await lifecycle.createDocument(document);
+      await lifecycle.createFolder(folder);
+      await authorizer.grant(teamSubject(team.id), 'editor', documentRef(document.id));
+      await authorizer.grant(userSubject('bob'), 'viewer', documentRef(document.id));
+      await authorizer.grant(teamSubject('gone-team'), 'viewer', documentRef(document.id));
+      await authorizer.grant(teamSubject('gone-team'), 'editor', folderRef(folder.id));
+
+      expect(await reconciler.reconcile({ apply: false })).toEqual([
+        { kind: 'orphan-team-grants', id: 'gone-team' },
+      ]);
+      await reconciler.reconcile({ apply: true });
+
+      expect(await authorizer.grantsOn(folderRef(folder.id))).toEqual([
+        { subject: userSubject('alice'), role: 'owner' },
+      ]);
+      expect(await authorizer.grantsOn(documentRef(document.id))).toHaveLength(3);
       expect(await reconciler.reconcile({ apply: false })).toEqual([]);
     });
   });

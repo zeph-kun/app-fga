@@ -115,6 +115,9 @@ export abstract class Authorizer {
   /** Removes every grant on a resource, and for a document its link to a folder. */
   abstract revokeAll(resource: Resource): Promise<void>;
 
+  /** Removes every grant given to `subject`, on any Document or Folder. Revoking a subject that has none is a no-op. */
+  abstract revokeEverywhere(subject: Subject): Promise<void>;
+
   /** Ids of every resource of `type` on which the user holds `permission`, inherited access included. */
   abstract resourcesWhere(
     userId: string,

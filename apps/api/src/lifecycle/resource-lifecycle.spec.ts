@@ -1,4 +1,4 @@
-import { documentRef, folderRef, userSubject } from '../authorization/authorizer.js';
+import { documentRef, folderRef, teamSubject, userSubject } from '../authorization/authorizer.js';
 import { InMemoryAuthorizer } from '../authorization/in-memory-authorizer.js';
 import { InMemoryMembership } from '../authorization/in-memory-membership.js';
 import type { Document } from '../documents/document.js';
@@ -14,7 +14,7 @@ const folder: Folder = { id: 'folder-1', name: 'Projects', ownerId: 'alice' };
 const team: Team = { id: 'team-1', name: 'Design', ownerId: 'alice' };
 
 /** An InMemoryAuthorizer whose named operations fail, as OpenFGA does when it is down. */
-function setup(failing: ('grant' | 'setParent' | 'revokeAll' | 'addMember' | 'removeMember')[] = []) {
+function setup(failing: ('grant' | 'setParent' | 'revokeAll' | 'revokeEverywhere' | 'addMember' | 'removeMember')[] = []) {
   class Flaky extends InMemoryAuthorizer {
     override grant(...args: Parameters<InMemoryAuthorizer['grant']>): Promise<void> {
       return failing.includes('grant') ? Promise.reject(new Error('OpenFGA unavailable')) : super.grant(...args);
@@ -28,6 +28,11 @@ function setup(failing: ('grant' | 'setParent' | 'revokeAll' | 'addMember' | 're
       return failing.includes('revokeAll')
         ? Promise.reject(new Error('OpenFGA unavailable'))
         : super.revokeAll(...args);
+    }
+    override revokeEverywhere(...args: Parameters<InMemoryAuthorizer['revokeEverywhere']>): Promise<void> {
+      return failing.includes('revokeEverywhere')
+        ? Promise.reject(new Error('OpenFGA unavailable'))
+        : super.revokeEverywhere(...args);
     }
   }
   class FlakyMembership extends InMemoryMembership {
@@ -210,6 +215,31 @@ describe('ResourceLifecycle', () => {
   });
 
   describe('deleteTeam', () => {
+    it('removes the grants given to the Team and leaves the other grants alone', async () => {
+      const { authorizer, lifecycle } = setup();
+      await lifecycle.createTeam(team);
+      await authorizer.grant(teamSubject(team.id), 'editor', documentRef(document.id));
+      await authorizer.grant(teamSubject(team.id), 'viewer', folderRef(folder.id));
+      await authorizer.grant(userSubject('bob'), 'viewer', documentRef(document.id));
+
+      await lifecycle.deleteTeam(team.id);
+
+      expect(await authorizer.grantsOn(documentRef(document.id))).toEqual([
+        { subject: userSubject('bob'), role: 'viewer' },
+      ]);
+      expect(await authorizer.grantsOn(folderRef(folder.id))).toEqual([]);
+    });
+
+    it('keeps the Team, so the delete can be retried, when its grants cannot be removed', async () => {
+      const { authorizer, teams, lifecycle } = setup(['revokeEverywhere']);
+      await lifecycle.createTeam(team);
+      await authorizer.grant(teamSubject(team.id), 'editor', documentRef(document.id));
+
+      await expect(lifecycle.deleteTeam(team.id)).rejects.toThrow('OpenFGA unavailable');
+
+      expect(await teams.findById(team.id)).toEqual(team);
+    });
+
     it('removes every member and then the Team', async () => {
       const { membership, teams, lifecycle } = setup();
       await lifecycle.createTeam(team);

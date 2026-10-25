@@ -301,6 +301,25 @@ export function authorizerContract(
       await expect(authorizer.revokeAll(documentRef(randomUUID()))).resolves.toBeUndefined();
     });
 
+    it('revokes every grant given to a subject, on documents and folders, and leaves the others alone', async () => {
+      const { authorizer } = await create();
+      const team = teamSubject(randomUUID());
+      const doc = documentRef(randomUUID());
+      const aFolder = folderRef(randomUUID());
+      await authorizer.grant(team, 'editor', doc);
+      await authorizer.grant(team, 'viewer', aFolder);
+      await authorizer.grant(userSubject('bob'), 'viewer', doc);
+      await authorizer.grant(teamSubject(randomUUID()), 'viewer', doc);
+
+      await authorizer.revokeEverywhere(team);
+
+      expect(await authorizer.grantsOn(doc)).toHaveLength(2);
+      expect(await authorizer.grantsOn(doc)).not.toContainEqual(expect.objectContaining({ subject: team }));
+      expect(await authorizer.grantsOn(aFolder)).toEqual([]);
+      expect(await authorizer.can('bob', 'can_view', doc)).toBe(true);
+      await expect(authorizer.revokeEverywhere(teamSubject(randomUUID()))).resolves.toBeUndefined();
+    });
+
     describe('documents in a folder', () => {
       async function setup() {
         const { authorizer } = await create();

@@ -28,6 +28,7 @@ type Operation =
   | { kind: 'grant'; subject: Subject; role: Role; resource: Resource; expiry: 'none' | keyof typeof EXPIRIES }
   | { kind: 'revoke'; subject: Subject; role: Role; resource: Resource }
   | { kind: 'revokeAll'; resource: Resource }
+  | { kind: 'revokeEverywhere'; subject: Subject }
   | { kind: 'setParent'; documentId: string; folderId: string | null }
   | { kind: 'addMember'; team: string; user: string }
   | { kind: 'removeMember'; team: string; user: string }
@@ -65,6 +66,7 @@ const operationArb: fc.Arbitrary<Operation> = fc.oneof(
     resource: resourceArb,
   }),
   fc.record({ kind: fc.constant('revokeAll' as const), resource: resourceArb }),
+  fc.record({ kind: fc.constant('revokeEverywhere' as const), subject: subjectArb }),
   fc.record({
     kind: fc.constant('setParent' as const),
     documentId: fc.constantFrom(...DOCUMENTS),
@@ -121,6 +123,11 @@ class Model {
           if (g.resource.type === op.resource.type && g.resource.id === op.resource.id) this.grants.delete(key);
         }
         if (op.resource.type === 'document') this.parents.delete(op.resource.id);
+        return;
+      case 'revokeEverywhere':
+        for (const [key, g] of this.grants) {
+          if (g.subject.type === op.subject.type && g.subject.id === op.subject.id) this.grants.delete(key);
+        }
         return;
       case 'setParent':
         if (op.folderId === null) this.parents.delete(op.documentId);
@@ -222,6 +229,8 @@ function prefixed(run: string, op: Operation): Operation {
     case 'grant':
     case 'revoke':
       return { ...op, subject: subject(op.subject), resource: resource(op.resource) };
+    case 'revokeEverywhere':
+      return { ...op, subject: subject(op.subject) };
     case 'revokeAll':
       return { ...op, resource: resource(op.resource) };
     case 'setParent':
@@ -248,6 +257,8 @@ async function perform({ authorizer, membership, managers }: Wired, op: Operatio
       return authorizer.revoke(op.subject, op.role, op.resource);
     case 'revokeAll':
       return authorizer.revokeAll(op.resource);
+    case 'revokeEverywhere':
+      return authorizer.revokeEverywhere(op.subject);
     case 'setParent':
       return authorizer.setParent(op.documentId, op.folderId);
     case 'addMember':

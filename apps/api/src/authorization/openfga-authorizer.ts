@@ -100,6 +100,14 @@ export class OpenFgaAuthorizer extends Authorizer {
     await this.client.write({ deletes: tuples }, ignoreMissingDeletes);
   }
 
+  override async revokeEverywhere(subject: Subject): Promise<void> {
+    const user = subjectString(subject);
+    for (const type of ['document', 'folder'] as const) {
+      const tuples = await this.store.tuplesOfUser(user, type);
+      if (tuples.length > 0) await this.client.write({ deletes: tuples }, ignoreMissingDeletes);
+    }
+  }
+
   override async resourcesWhere(
     userId: string,
     permission: RolePermission,

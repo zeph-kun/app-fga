@@ -60,13 +60,18 @@ export class OpenFgaStore implements OnModuleInit {
     return this.readAll({ object });
   }
 
+  /** Every tuple that gives `user` a relation on an object of `type`. OpenFGA cannot read by user alone, hence the type. */
+  tuplesOfUser(user: string, type: string): Promise<Tuple[]> {
+    return this.readAll({ user, object: `${type}:` });
+  }
+
   /** The ids of every object of `type` that has at least one tuple. Reads the whole store: for maintenance only. */
   async objectIdsOfType(type: string): Promise<string[]> {
     const objects = (await this.readAll({})).map((t) => t.object).filter((o) => o.startsWith(`${type}:`));
     return [...new Set(objects.map((o) => o.slice(type.length + 1)))];
   }
 
-  private async readAll(filter: { object?: string }): Promise<Tuple[]> {
+  private async readAll(filter: { user?: string; object?: string }): Promise<Tuple[]> {
     const tuples: Tuple[] = [];
     let continuationToken: string | undefined;
     do {
