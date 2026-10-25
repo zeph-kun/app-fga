@@ -122,7 +122,7 @@ export function authorizerContract(
       const expired = documentRef(randomUUID());
       await authorizer.grant(userSubject('alice'), 'owner', folder);
       await authorizer.grant(userSubject('bob'), 'commenter', folder);
-      await authorizer.setParent(inFolder.id, folder.id);
+      await authorizer.setParent(documentRef(inFolder.id), folder.id);
       await membership.add(teamId, 'carol');
       await authorizer.grant(teamSubject(teamId), 'commenter', viaTeam);
       await authorizer.grant(userSubject('dave'), 'commenter', expired, inThePast);
@@ -153,7 +153,7 @@ export function authorizerContract(
       const doc = documentRef(randomUUID());
       const team = randomUUID();
       await authorizer.grant(userSubject('alice'), 'owner', folder);
-      await authorizer.setParent(doc.id, folder.id);
+      await authorizer.setParent(documentRef(doc.id), folder.id);
       await membership.add(team, 'carol');
       await authorizer.grant(teamSubject(team), 'viewer', doc);
       await authorizer.grant(userSubject('bob'), 'editor', doc, inThePast);
@@ -176,7 +176,7 @@ export function authorizerContract(
       await authorizer.grant(userSubject('alice'), 'editor', edited);
       await authorizer.grant(userSubject('alice'), 'viewer', viewed);
       await authorizer.grant(userSubject('alice'), 'editor', folder);
-      await authorizer.setParent(inherited.id, folder.id);
+      await authorizer.setParent(documentRef(inherited.id), folder.id);
       await authorizer.grant(userSubject('alice'), 'viewer', expired, inThePast);
       await authorizer.grant(userSubject('bob'), 'owner', others);
 
@@ -253,7 +253,7 @@ export function authorizerContract(
       const [granted, linked, revoked] = [documentRef(randomUUID()), documentRef(randomUUID()), documentRef(randomUUID())];
       const aFolder = folderRef(randomUUID());
       await authorizer.grant(userSubject('alice'), 'owner', granted);
-      await authorizer.setParent(linked.id, aFolder.id);
+      await authorizer.setParent(documentRef(linked.id), aFolder.id);
       await authorizer.grant(userSubject('alice'), 'owner', revoked);
       await authorizer.revokeAll(revoked);
       await authorizer.grant(userSubject('alice'), 'owner', aFolder);
@@ -325,7 +325,7 @@ export function authorizerContract(
         const { authorizer } = await create();
         const aFolder = folderRef(randomUUID());
         const doc = documentRef(randomUUID());
-        await authorizer.setParent(doc.id, aFolder.id);
+        await authorizer.setParent(documentRef(doc.id), aFolder.id);
         return { authorizer, aFolder, doc };
       }
 
@@ -367,7 +367,7 @@ export function authorizerContract(
       it('stops inheriting when the document leaves the folder', async () => {
         const { authorizer, aFolder, doc } = await setup();
         await authorizer.grant(userSubject('bob'), 'viewer', aFolder);
-        await authorizer.setParent(doc.id, null);
+        await authorizer.setParent(documentRef(doc.id), null);
 
         expect(await authorizer.can('bob', 'can_view', doc)).toBe(false);
       });
@@ -377,7 +377,7 @@ export function authorizerContract(
         const other = folderRef(randomUUID());
         await authorizer.grant(userSubject('old-viewer'), 'viewer', aFolder);
         await authorizer.grant(userSubject('new-viewer'), 'viewer', other);
-        await authorizer.setParent(doc.id, other.id);
+        await authorizer.setParent(documentRef(doc.id), other.id);
 
         expect(await authorizer.can('old-viewer', 'can_view', doc)).toBe(false);
         expect(await authorizer.can('new-viewer', 'can_view', doc)).toBe(true);
@@ -394,7 +394,7 @@ export function authorizerContract(
       it('takes a document out of a folder it was never in without failing', async () => {
         const { authorizer } = await create();
 
-        await expect(authorizer.setParent(randomUUID(), null)).resolves.toBeUndefined();
+        await expect(authorizer.setParent(documentRef(randomUUID()), null)).resolves.toBeUndefined();
       });
     });
 
@@ -429,7 +429,7 @@ export function authorizerContract(
         const teamId = randomUUID();
         const aFolder = folderRef(randomUUID());
         const doc = documentRef(randomUUID());
-        await authorizer.setParent(doc.id, aFolder.id);
+        await authorizer.setParent(documentRef(doc.id), aFolder.id);
         await membership.add(teamId, 'alice');
         await authorizer.grant(teamSubject(teamId), 'viewer', aFolder);
 
@@ -522,7 +522,7 @@ export function authorizerContract(
         const aFolder = folderRef(randomUUID());
         const doc = documentRef(randomUUID());
         await membership.add(teamId, 'alice');
-        await authorizer.setParent(doc.id, aFolder.id);
+        await authorizer.setParent(documentRef(doc.id), aFolder.id);
         await authorizer.grant(teamSubject(teamId), 'viewer', doc, inThePast);
         await authorizer.grant(userSubject('alice'), 'viewer', aFolder);
 
@@ -550,7 +550,7 @@ export function authorizerContract(
         const doc = documentRef(randomUUID());
         const inTwoHours = new Date(inAnHour.getTime() + 3_600_000);
         await membership.add(teamId, 'alice');
-        await authorizer.setParent(doc.id, aFolder.id);
+        await authorizer.setParent(documentRef(doc.id), aFolder.id);
         await authorizer.grant(teamSubject(teamId), 'viewer', aFolder, inTwoHours);
         await authorizer.grant(userSubject('alice'), 'editor', doc, inAnHour);
 
@@ -575,14 +575,122 @@ export function authorizerContract(
         const doc = documentRef(randomUUID());
         const permanentFolder = folderRef(randomUUID());
         const inPermanent = documentRef(randomUUID());
-        await authorizer.setParent(doc.id, aFolder.id);
+        await authorizer.setParent(documentRef(doc.id), aFolder.id);
         await authorizer.grant(userSubject('alice'), 'viewer', aFolder, inAnHour);
-        await authorizer.setParent(inPermanent.id, permanentFolder.id);
+        await authorizer.setParent(documentRef(inPermanent.id), permanentFolder.id);
         await authorizer.grant(userSubject('alice'), 'viewer', permanentFolder);
         await authorizer.grant(userSubject('alice'), 'viewer', inPermanent, inAnHour);
 
         expect((await authorizer.expiryOn('alice', doc))?.getTime()).toBe(inAnHour.getTime());
         expect(await authorizer.expiryOn('alice', inPermanent)).toBeNull();
+      });
+    });
+
+    describe('nested folders', () => {
+      /** top > middle > bottom, and a document in bottom. */
+      async function setup() {
+        const { authorizer, membership } = await create();
+        const top = folderRef(randomUUID());
+        const middle = folderRef(randomUUID());
+        const bottom = folderRef(randomUUID());
+        const doc = documentRef(randomUUID());
+        await authorizer.setParent(middle, top.id);
+        await authorizer.setParent(bottom, middle.id);
+        await authorizer.setParent(doc, bottom.id);
+        return { authorizer, membership, top, middle, bottom, doc };
+      }
+
+      it('passes a role down to every level below, and never up', async () => {
+        const { authorizer, top, middle, bottom, doc } = await setup();
+        await authorizer.grant(userSubject('on-top'), 'viewer', top);
+        await authorizer.grant(userSubject('on-middle'), 'editor', middle);
+
+        for (const below of [top, middle, bottom, doc]) expect(await authorizer.can('on-top', 'can_view', below)).toBe(true);
+        expect(await authorizer.can('on-top', 'can_edit', bottom)).toBe(false);
+        for (const below of [middle, bottom, doc]) expect(await authorizer.can('on-middle', 'can_edit', below)).toBe(true);
+        expect(await authorizer.can('on-middle', 'can_view', top)).toBe(false);
+      });
+
+      it('makes the Owner of a Folder the Owner of everything below it', async () => {
+        const { authorizer, top, middle, bottom, doc } = await setup();
+        await authorizer.grant(userSubject('alice'), 'owner', top);
+
+        for (const below of [middle, bottom, doc]) {
+          expect(await authorizer.can('alice', 'can_delete', below)).toBe(true);
+          expect(await authorizer.can('alice', 'can_share', below)).toBe(true);
+        }
+      });
+
+      it('lists the folders and documents reached through an ancestor', async () => {
+        const { authorizer, top, middle, bottom, doc } = await setup();
+        await authorizer.grant(userSubject('alice'), 'viewer', middle);
+
+        expect(await authorizer.resourcesWhere('alice', 'can_view', 'folder')).toEqual(
+          expect.arrayContaining([middle.id, bottom.id]),
+        );
+        expect(await authorizer.resourcesWhere('alice', 'can_view', 'folder')).not.toContain(top.id);
+        expect(await authorizer.resourcesWhere('alice', 'can_view', 'document')).toContain(doc.id);
+      });
+
+      it('reports the parent of a Folder, and none once it is taken out', async () => {
+        const { authorizer, top, middle } = await setup();
+
+        expect(await authorizer.parentOf(middle)).toBe(top.id);
+        expect(await authorizer.parentOf(top)).toBeNull();
+
+        await authorizer.setParent(middle, null);
+
+        expect(await authorizer.parentOf(middle)).toBeNull();
+      });
+
+      it('gives the roles of the new parent, and takes away those of the old one, when a Folder moves', async () => {
+        const { authorizer, top, middle, bottom, doc } = await setup();
+        const elsewhere = folderRef(randomUUID());
+        await authorizer.grant(userSubject('old'), 'viewer', top);
+        await authorizer.grant(userSubject('new'), 'viewer', elsewhere);
+
+        await authorizer.setParent(middle, elsewhere.id);
+
+        for (const moved of [middle, bottom, doc]) {
+          expect(await authorizer.can('old', 'can_view', moved)).toBe(false);
+          expect(await authorizer.can('new', 'can_view', moved)).toBe(true);
+        }
+        expect(await authorizer.can('old', 'can_view', top)).toBe(true);
+      });
+
+      it('ends access at the latest end over the whole chain of Folders', async () => {
+        const { authorizer, top, middle, doc } = await setup();
+        await authorizer.grant(userSubject('alice'), 'viewer', top, inAnHour);
+        await authorizer.grant(userSubject('alice'), 'viewer', middle, new Date(inAnHour.getTime() + 3_600_000));
+
+        expect((await authorizer.expiryOn('alice', doc))?.getTime()).toBe(inAnHour.getTime() + 3_600_000);
+
+        await authorizer.grant(userSubject('alice'), 'viewer', top);
+
+        expect(await authorizer.expiryOn('alice', doc)).toBeNull();
+      });
+
+      it('lists who has access through any ancestor', async () => {
+        const { authorizer, membership, top, middle, doc } = await setup();
+        await authorizer.grant(userSubject('bob'), 'viewer', top);
+        await membership.add('team-1', 'carol');
+        await authorizer.grant(teamSubject('team-1'), 'viewer', middle);
+
+        expect(await authorizer.usersWithAccess(doc, 'can_view')).toEqual(expect.arrayContaining(['bob', 'carol']));
+        expect(await authorizer.usersWithAccess(middle, 'can_view')).toEqual(expect.arrayContaining(['bob', 'carol']));
+        expect(await authorizer.usersWithAccess(top, 'can_view')).toEqual(['bob']);
+      });
+
+      it('forgets the parent of a Folder that is revoked, and counts a lone link as having grants', async () => {
+        const { authorizer, top, middle } = await setup();
+
+        expect(await authorizer.resourcesWithGrants('folder')).toContain(middle.id);
+
+        await authorizer.revokeAll(middle);
+
+        expect(await authorizer.parentOf(middle)).toBeNull();
+        expect(await authorizer.resourcesWithGrants('folder')).not.toContain(middle.id);
+        expect(await authorizer.resourcesWithGrants('folder')).not.toContain(top.id);
       });
     });
 
@@ -592,7 +700,7 @@ export function authorizerContract(
         const teamId = randomUUID();
         const aFolder = folderRef(randomUUID());
         const doc = documentRef(randomUUID());
-        await authorizer.setParent(doc.id, aFolder.id);
+        await authorizer.setParent(documentRef(doc.id), aFolder.id);
         await membership.add(teamId, 'carol');
         await authorizer.grant(userSubject('alice'), 'owner', doc);
         await authorizer.grant(userSubject('bob'), 'viewer', aFolder);

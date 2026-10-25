@@ -34,6 +34,7 @@ interface StoredGrant extends Grant {
 /** Test adapter mirroring infra/openfga/model.fga. */
 export class InMemoryAuthorizer extends Authorizer {
   private readonly grants = new Map<string, StoredGrant>();
+  /** `type:id` of a Document or Folder to the id of the Folder it is in. */
   private readonly parents = new Map<string, string>();
 
   constructor(
@@ -69,7 +70,7 @@ export class InMemoryAuthorizer extends Authorizer {
     for (const [k, g] of this.grants) {
       if (sameResource(g.resource, resource)) this.grants.delete(k);
     }
-    if (resource.type === 'document') this.parents.delete(resource.id);
+    this.parents.delete(parentKey(resource));
     return Promise.resolve();
   }
 
@@ -89,7 +90,7 @@ export class InMemoryAuthorizer extends Authorizer {
     for (const { resource } of this.grants.values()) {
       if (resource.type === type) ids.add(resource.id);
     }
-    if (type === 'document') for (const id of this.parents.keys()) ids.add(id);
+    for (const id of this.withParent(type)) ids.add(id);
     const teams = await this.membership.teamsOf(userId);
     return [...ids].filter((id) => this.holds(userId, teams, ROLE_OF[permission], { type, id }));
   }
@@ -99,18 +100,18 @@ export class InMemoryAuthorizer extends Authorizer {
     for (const { resource } of this.grants.values()) {
       if (resource.type === type) ids.add(resource.id);
     }
-    if (type === 'document') for (const id of this.parents.keys()) ids.add(id);
+    for (const id of this.withParent(type)) ids.add(id);
     return Promise.resolve([...ids]);
   }
 
-  override setParent(documentId: string, folderId: string | null): Promise<void> {
-    if (folderId === null) this.parents.delete(documentId);
-    else this.parents.set(documentId, folderId);
+  override setParent(child: Resource, parentId: string | null): Promise<void> {
+    if (parentId === null) this.parents.delete(parentKey(child));
+    else this.parents.set(parentKey(child), parentId);
     return Promise.resolve();
   }
 
-  override parentOf(documentId: string): Promise<string | null> {
-    return Promise.resolve(this.parents.get(documentId) ?? null);
+  override parentOf(child: Resource): Promise<string | null> {
+    return Promise.resolve(this.parents.get(parentKey(child)) ?? null);
   }
 
   override async usersWithAccess(resource: Resource, permission: RolePermission): Promise<string[]> {
@@ -125,10 +126,19 @@ export class InMemoryAuthorizer extends Authorizer {
         else for (const member of await this.membership.members(g.subject.id)) users.add(member);
       }
     };
-    await scan(resource);
-    const parent = resource.type === 'document' ? this.parents.get(resource.id) : undefined;
-    if (parent !== undefined) await scan({ type: 'folder', id: parent });
+    for (let target: Resource | undefined = resource; target; target = this.parentFolder(target)) await scan(target);
     return [...users];
+  }
+
+  /** The Folder a Document or Folder is in. */
+  private parentFolder(child: Resource): Resource | undefined {
+    const id = this.parents.get(parentKey(child));
+    return id === undefined ? undefined : { type: 'folder', id };
+  }
+
+  /** Ids of the resources of `type` that sit in a Folder. */
+  private withParent(type: ResourceType): string[] {
+    return [...this.parents.keys()].filter((key) => key.startsWith(`${type}:`)).map((key) => key.slice(type.length + 1));
   }
 
   /** A role is held directly (or through a higher role, or via team membership), or inherited from the document's folder. */
@@ -140,8 +150,8 @@ export class InMemoryAuthorizer extends Authorizer {
       const matches = g.subject.type === 'user' ? g.subject.id === userId : teams.includes(g.subject.id);
       if (matches) return true;
     }
-    const parent = resource.type === 'document' ? this.parents.get(resource.id) : undefined;
-    return parent !== undefined && this.holds(userId, teams, role, { type: 'folder', id: parent });
+    const parent = this.parentFolder(resource);
+    return parent !== undefined && this.holds(userId, teams, role, parent);
   }
 }
 
@@ -155,4 +165,8 @@ function sameResource(a: Resource, b: Resource): boolean {
 
 function isExpired(grant: Grant): boolean {
   return grant.expiresAt !== undefined && grant.expiresAt.getTime() <= Date.now();
+}
+
+function parentKey({ type, id }: Resource): string {
+  return `${type}:${id}`;
 }

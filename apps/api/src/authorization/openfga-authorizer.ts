@@ -126,9 +126,9 @@ export class OpenFgaAuthorizer extends Authorizer {
     return this.store.objectIdsOfType(type);
   }
 
-  override async setParent(documentId: string, folderId: string | null): Promise<void> {
-    const object = objectOf({ type: 'document', id: documentId });
-    const wanted = folderId === null ? undefined : `folder:${folderId}`;
+  override async setParent(child: Resource, parentId: string | null): Promise<void> {
+    const object = objectOf(child);
+    const wanted = parentId === null ? undefined : `folder:${parentId}`;
     const current = (await this.store.tuplesOn(object)).filter((t) => t.relation === 'parent');
 
     const deletes = current.filter((t) => t.user !== wanted);
@@ -140,8 +140,8 @@ export class OpenFgaAuthorizer extends Authorizer {
     await this.client.write({ writes, deletes }, ignoreMissingDeletes);
   }
 
-  override async parentOf(documentId: string): Promise<string | null> {
-    const tuples = await this.store.tuplesOn(objectOf({ type: 'document', id: documentId }));
+  override async parentOf(child: Resource): Promise<string | null> {
+    const tuples = await this.store.tuplesOn(objectOf(child));
     const parent = tuples.find((t) => t.relation === 'parent');
     return parent ? parent.user.slice('folder:'.length) : null;
   }

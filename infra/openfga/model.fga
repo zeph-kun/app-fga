@@ -18,12 +18,15 @@ type organization
     define can_create_team: manager
 
 # Roles are what a User or Team is given; `can_*` permissions are what the API checks.
+# A folder can sit in another folder, and then inherits its roles; the API keeps this to 5 levels
+# and refuses a loop, which OpenFGA would not.
 type folder
   relations
-    define owner: [user]
-    define editor: [user, user with non_expired, team#member, team#member with non_expired] or owner
-    define commenter: [user, user with non_expired, team#member, team#member with non_expired] or editor
-    define viewer: [user, user with non_expired, team#member, team#member with non_expired] or commenter
+    define parent: [folder]
+    define owner: [user] or owner from parent
+    define editor: [user, user with non_expired, team#member, team#member with non_expired] or owner or editor from parent
+    define commenter: [user, user with non_expired, team#member, team#member with non_expired] or editor or commenter from parent
+    define viewer: [user, user with non_expired, team#member, team#member with non_expired] or commenter or viewer from parent
 
     define can_view: viewer
     define can_comment: commenter

@@ -84,7 +84,7 @@ describe('Reconciler', () => {
       ]);
       await reconciler.reconcile({ apply: true });
 
-      expect(await authorizer.parentOf(document.id)).toBe(folder.id);
+      expect(await authorizer.parentOf(documentRef(document.id))).toBe(folder.id);
     });
 
     it('takes a Document out of a Folder its row no longer names', async () => {
@@ -92,11 +92,11 @@ describe('Reconciler', () => {
       await lifecycle.createFolder(folder);
       await lifecycle.createDocument({ ...document, folderId: folder.id });
       await lifecycle.moveDocument({ ...document, folderId: folder.id }, null);
-      await authorizer.setParent(document.id, folder.id);
+      await authorizer.setParent(documentRef(document.id), folder.id);
 
       await reconciler.reconcile({ apply: true });
 
-      expect(await authorizer.parentOf(document.id)).toBeNull();
+      expect(await authorizer.parentOf(documentRef(document.id))).toBeNull();
     });
   });
 

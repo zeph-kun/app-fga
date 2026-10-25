@@ -16,7 +16,8 @@ import {
 
 const USERS = ['u1', 'u2', 'u3'] as const;
 const TEAMS = ['t1', 't2'] as const;
-const FOLDERS = ['f1', 'f2'] as const;
+// A Folder only gets a parent of a lower number, so that no sequence of moves makes a loop (the API refuses them).
+const FOLDERS = ['f1', 'f2', 'f3'] as const;
 const DOCUMENTS = ['d1', 'd2'] as const;
 const PERMISSIONS = ['can_view', 'can_comment', 'can_edit', 'can_delete', 'can_share'] as const satisfies readonly RolePermission[];
 
@@ -29,7 +30,7 @@ type Operation =
   | { kind: 'revoke'; subject: Subject; role: Role; resource: Resource }
   | { kind: 'revokeAll'; resource: Resource }
   | { kind: 'revokeEverywhere'; subject: Subject }
-  | { kind: 'setParent'; documentId: string; folderId: string | null }
+  | { kind: 'setParent'; child: Resource; parentId: string | null }
   | { kind: 'addMember'; team: string; user: string }
   | { kind: 'removeMember'; team: string; user: string }
   | { kind: 'appoint'; user: string }
@@ -69,9 +70,16 @@ const operationArb: fc.Arbitrary<Operation> = fc.oneof(
   fc.record({ kind: fc.constant('revokeEverywhere' as const), subject: subjectArb }),
   fc.record({
     kind: fc.constant('setParent' as const),
-    documentId: fc.constantFrom(...DOCUMENTS),
-    folderId: fc.option(fc.constantFrom(...FOLDERS), { nil: null }),
+    child: fc.constantFrom(...DOCUMENTS).map(documentRef),
+    parentId: fc.option(fc.constantFrom(...FOLDERS), { nil: null }),
   }),
+  fc.constantFrom(...FOLDERS.slice(1)).chain((child) =>
+    fc.record({
+      kind: fc.constant('setParent' as const),
+      child: fc.constant(folderRef(child)),
+      parentId: fc.option(fc.constantFrom(...FOLDERS.slice(0, FOLDERS.indexOf(child))), { nil: null }),
+    }),
+  ),
   fc.record({ kind: fc.constant('addMember' as const), team: teamArb, user: userArb }),
   fc.record({ kind: fc.constant('removeMember' as const), team: teamArb, user: userArb }),
   fc.record({ kind: fc.constant('appoint' as const), user: userArb }),
@@ -101,6 +109,7 @@ class Model {
     string,
     { subject: Subject; role: Role; resource: Resource; expiresAt: Date | undefined }
   >();
+  /** `type:id` of a Document or Folder to the id of the Folder it is in. */
   private readonly parents = new Map<string, string>();
   private readonly members = new Map<string, Set<string>>();
   private readonly managers = new Set<string>();
@@ -122,7 +131,7 @@ class Model {
         for (const [key, g] of this.grants) {
           if (g.resource.type === op.resource.type && g.resource.id === op.resource.id) this.grants.delete(key);
         }
-        if (op.resource.type === 'document') this.parents.delete(op.resource.id);
+        this.parents.delete(`${op.resource.type}:${op.resource.id}`);
         return;
       case 'revokeEverywhere':
         for (const [key, g] of this.grants) {
@@ -130,8 +139,8 @@ class Model {
         }
         return;
       case 'setParent':
-        if (op.folderId === null) this.parents.delete(op.documentId);
-        else this.parents.set(op.documentId, op.folderId);
+        if (op.parentId === null) this.parents.delete(`${op.child.type}:${op.child.id}`);
+        else this.parents.set(`${op.child.type}:${op.child.id}`, op.parentId);
         return;
       case 'addMember':
         this.members.set(op.team, (this.members.get(op.team) ?? new Set()).add(op.user));
@@ -151,23 +160,29 @@ class Model {
   can(user: string, permission: Permission, resource: Resource): boolean {
     if (permission === 'can_create_team') return this.managers.has(user);
     const role = ROLE_FOR[permission];
-    if (this.holdsOn(user, role, resource)) return true;
-    const folder = resource.type === 'document' ? this.parents.get(resource.id) : undefined;
-    return folder !== undefined && this.holdsOn(user, role, folderRef(folder));
+    return this.chainOf(resource).some((r) => this.holdsOn(user, role, r));
+  }
+
+  /** The resource and every Folder above it, nearest first. */
+  private chainOf(resource: Resource): Resource[] {
+    const chain = [resource];
+    for (let parent = this.parents.get(`${resource.type}:${resource.id}`); parent !== undefined; ) {
+      chain.push(folderRef(parent));
+      parent = this.parents.get(`folder:${parent}`);
+    }
+    return chain;
   }
 
   /**
    * When the user's access ends: the latest end among every unexpired grant that reaches them
-   * (their own, their Teams', on the resource or its Folder), or null if one of them never ends.
+   * (their own, their Teams', on the resource or any Folder above it), or null if one of them never ends.
    */
   expiryOn(user: string, resource: Resource): Date | null {
-    const folder = resource.type === 'document' ? this.parents.get(resource.id) : undefined;
+    const chain = this.chainOf(resource);
     const reaching = [...this.grants.values()].filter(
       (g) =>
         !isExpired(g.expiresAt) &&
-        [resource, ...(folder === undefined ? [] : [folderRef(folder)])].some(
-          (r) => r.type === g.resource.type && r.id === g.resource.id,
-        ) &&
+        chain.some((r) => r.type === g.resource.type && r.id === g.resource.id) &&
         (g.subject.type === 'user' ? g.subject.id === user : this.members.get(g.subject.id)?.has(user) === true),
     );
     if (reaching.some((g) => g.expiresAt === undefined)) return null;
@@ -175,10 +190,10 @@ class Model {
     return ends.length === 0 ? null : new Date(Math.max(...ends));
   }
 
-  /** Resources of `type` with at least one grant (expired or not) or, for a document, a folder link. */
+  /** Resources of `type` with at least one grant (expired or not) or a link to a parent Folder. */
   withGrants(type: 'document' | 'folder'): string[] {
     const ids = new Set([...this.grants.values()].filter((g) => g.resource.type === type).map((g) => g.resource.id));
-    if (type === 'document') for (const id of this.parents.keys()) ids.add(id);
+    for (const key of this.parents.keys()) if (key.startsWith(`${type}:`)) ids.add(key.slice(type.length + 1));
     return [...ids];
   }
 
@@ -190,8 +205,8 @@ class Model {
     return [...(this.members.get(team) ?? [])];
   }
 
-  parentOf(documentId: string): string | null {
-    return this.parents.get(documentId) ?? null;
+  parentOf(resource: Resource): string | null {
+    return this.parents.get(`${resource.type}:${resource.id}`) ?? null;
   }
 
   /** The direct, unexpired grants on a resource. */
@@ -236,8 +251,8 @@ function prefixed(run: string, op: Operation): Operation {
     case 'setParent':
       return {
         ...op,
-        documentId: `${run}-${op.documentId}`,
-        folderId: op.folderId === null ? null : `${run}-${op.folderId}`,
+        child: resource(op.child),
+        parentId: op.parentId === null ? null : `${run}-${op.parentId}`,
       };
     case 'addMember':
     case 'removeMember':
@@ -260,7 +275,7 @@ async function perform({ authorizer, membership, managers }: Wired, op: Operatio
     case 'revokeEverywhere':
       return authorizer.revokeEverywhere(op.subject);
     case 'setParent':
-      return authorizer.setParent(op.documentId, op.folderId);
+      return authorizer.setParent(op.child, op.parentId);
     case 'addMember':
       return membership.add(op.team, op.user);
     case 'removeMember':
@@ -351,8 +366,10 @@ export function authorizerPropertyContract(
             for (const team of TEAMS.map(id)) {
               expect(sorted(await membership.members(team))).toEqual(sorted(model.teamMembers(team)));
             }
-            for (const document of DOCUMENTS.map(id)) {
-              expect(await authorizer.parentOf(document)).toBe(model.parentOf(document));
+            for (const resource of resources) {
+              expect(await authorizer.parentOf(resource), `parent of ${resource.type}:${resource.id}`).toBe(
+                model.parentOf(resource),
+              );
             }
           }),
           { numRuns: runs },

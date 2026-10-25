@@ -32,12 +32,12 @@ _Avoid_: Group
 
 **Expiry**: the moment a time-limited Grant stops applying; a Grant without one lasts until it is revoked. The Owner sets it when sharing and sees it in the Shares list.
 
-**Access expiry**: the moment a User's own access to a Document ends, shown to them as the time left. It is the latest Expiry among all the ways they have access (own Grant, Team, Folder), and there is none if any of those never expires, or if they are the Owner.
+**Access expiry**: the moment a User's own access to a Document ends, shown to them as the time left. It is the latest Expiry among all the ways they have access (own Grant, Team, and every Folder above), and there is none if any of those never expires, or if they are the Owner.
 
 **Shares list**: the Grants currently on a Document, with their role and Expiry. Only the Owner can see it; it never includes the Owner.
 
-**Folder**: a named container for Documents, created by a User who becomes its Owner. A Document is in at most one Folder; Folders do not nest. Owner, Editor and Viewer mean the same on a Folder, and a role held on a Folder also applies to every Document in it. Only an empty Folder can be deleted.
+**Folder**: a named container for Documents and for other Folders, created by a User who becomes its Owner. A Document is in at most one Folder, and a Folder has at most one parent Folder, up to 5 levels deep (a Folder at the top is level 1). Owner, Editor, Commenter and Viewer mean the same on a Folder, and a role held on a Folder also applies to everything below it: its Documents and its Folders, at every level, but never upwards. Only an empty Folder, with no Document and no Folder in it, can be deleted. A User who is shared a Folder but not its parent sees it at the top of their workspace, and never the name of a parent they cannot see.
 
-**Move**: putting a Document in a Folder, or taking it out. The Document then gets the roles of its new Folder and loses those of the old one. Only its Owner can do it, and only into a Folder they can edit.
+**Move**: putting a Document or a Folder in a Folder, or taking it out to the top. It then gets the roles of its new Folder and loses those of the old one. Only its Owner can do it, and only into a Folder they can edit. A Folder cannot be moved into itself or into one of its own Folders, nor deeper than 5 levels.
 
 **Revoke**: removing a User's or Team's Grant on a Document or Folder. The Owner cannot be revoked.

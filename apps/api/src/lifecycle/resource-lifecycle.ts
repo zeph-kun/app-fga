@@ -33,7 +33,7 @@ export class ResourceLifecycle {
     await this.documents.save(document);
     try {
       await this.authorizer.grant(userSubject(document.ownerId), 'owner', documentRef(document.id));
-      if (document.folderId !== null) await this.authorizer.setParent(document.id, document.folderId);
+      if (document.folderId !== null) await this.authorizer.setParent(documentRef(document.id), document.folderId);
     } catch (error) {
       // Without its Owner grant nobody could ever open the document: do not keep it.
       await this.documents.delete(document.id);
@@ -58,7 +58,7 @@ export class ResourceLifecycle {
     const moved: Document = { ...current, folderId };
     await this.documents.save(moved);
     try {
-      await this.authorizer.setParent(current.id, folderId);
+      await this.authorizer.setParent(documentRef(current.id), folderId);
     } catch (error) {
       await this.documents.save(current);
       throw error;

@@ -21,6 +21,9 @@ export interface Resource {
   readonly id: string;
 }
 
+/** More than any real tree is deep (the API stops at 5): only there to end a walk over a loop. */
+const MAX_ANCESTORS = 25;
+
 export const documentRef = (id: string): Resource => ({ type: 'document', id });
 export const folderRef = (id: string): Resource => ({ type: 'folder', id });
 export const organizationRef = (): Resource => ({ type: 'organization', id: 'main' });
@@ -65,11 +68,10 @@ export abstract class Authorizer {
    * For display: guard actions with `can`.
    */
   async expiryOn(userId: string, resource: Resource): Promise<Date | null> {
-    const parent = resource.type === 'document' ? await this.parentOf(resource.id) : null;
+    const chain = await this.withAncestors(resource);
     const [teams, ...grantLists] = await Promise.all([
       this.membership.teamsOf(userId),
-      this.grantsOn(resource),
-      ...(parent === null ? [] : [this.grantsOn(folderRef(parent))]),
+      ...chain.map((r) => this.grantsOn(r)),
     ]);
     const now = Date.now();
     let latest: Date | null = null;
@@ -82,8 +84,19 @@ export abstract class Authorizer {
     return latest;
   }
 
-  /** The folder a document is in, or `null`. */
-  abstract parentOf(documentId: string): Promise<string | null>;
+  /** The resource and every Folder above it, nearest first. Bounded, so a loop in the data cannot hang it. */
+  private async withAncestors(resource: Resource): Promise<Resource[]> {
+    const chain = [resource];
+    for (let hops = 0; hops < MAX_ANCESTORS; hops++) {
+      const parent = await this.parentOf(chain[chain.length - 1] ?? resource);
+      if (parent === null) break;
+      chain.push(folderRef(parent));
+    }
+    return chain;
+  }
+
+  /** The Folder a Document or Folder is in, or `null`. */
+  abstract parentOf(child: Resource): Promise<string | null>;
 
   /** `expiresAt`, if given, makes the grant stop applying once that time passes. */
   abstract grant(subject: Subject, role: Role, resource: Resource, expiresAt?: Date): Promise<void>;
@@ -112,7 +125,7 @@ export abstract class Authorizer {
   /** The direct grants on a resource (an Owner's grant is `owner`; inherited and implied access is not listed). */
   abstract grantsOn(resource: Resource): Promise<Grant[]>;
 
-  /** Removes every grant on a resource, and for a document its link to a folder. */
+  /** Removes every grant on a resource, and its link to a parent Folder. */
   abstract revokeAll(resource: Resource): Promise<void>;
 
   /** Removes every grant given to `subject`, on any Document or Folder. Revoking a subject that has none is a no-op. */
@@ -131,8 +144,8 @@ export abstract class Authorizer {
    */
   abstract resourcesWithGrants(type: ResourceType): Promise<string[]>;
 
-  /** Puts the document in a folder, replacing its previous folder; `null` takes it out of any folder. */
-  abstract setParent(documentId: string, folderId: string | null): Promise<void>;
+  /** Puts a Document or Folder in a Folder, replacing its previous parent; `null` takes it out. The caller keeps loops and depth out. */
+  abstract setParent(child: Resource, parentId: string | null): Promise<void>;
 
   /**
    * Every User who holds `permission` on `resource`, with Team membership and

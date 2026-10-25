@@ -55,10 +55,10 @@ export class Reconciler {
         findings.push({ kind: 'missing-owner', type: 'document', id, ownerId });
         if (apply) await this.authorizer.grant(userSubject(ownerId), 'owner', documentRef(id));
       }
-      const actual = await this.authorizer.parentOf(id);
+      const actual = await this.authorizer.parentOf(documentRef(id));
       if (actual !== folderId) {
         findings.push({ kind: 'wrong-folder', id, expected: folderId, actual });
-        if (apply) await this.authorizer.setParent(id, folderId);
+        if (apply) await this.authorizer.setParent(documentRef(id), folderId);
       }
     }
 
