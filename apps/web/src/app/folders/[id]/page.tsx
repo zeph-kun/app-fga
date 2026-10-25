@@ -118,7 +118,7 @@ export default async function FolderPage({ params }: PageProps<"/folders/[id]">)
           {canEdit && (
             <NewDocumentButton folderId={id} />
           )}
-          {isOwner && (
+          {isOwner && folder.parentId !== null && (
             <MoveToFolder
               noun="folder"
               currentFolderId={folder.parentId}
